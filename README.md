@@ -2,6 +2,7 @@
 
 **Integrated Development Environment for OS Development on Windows**  
 A lightweight IDE for building, compiling, and deploying x86 operating systems with a single **Build & Run** workflow. Includes its own built-in compiler for seamless OS development.
+<img width="1039" height="621" alt="image" src="https://github.com/user-attachments/assets/54b365c1-93b1-47fe-a0eb-229aa70b586e" />
 
 ---
 
