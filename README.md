@@ -1,18 +1,18 @@
 # OSDev-IDE
 
-**Integrated Development Environment for OS Development**  
-A lightweight IDE for building, compiling, and deploying x86 operating systems with a single **Build & Run** workflow.
+**Integrated Development Environment for OS Development on Windows**  
+A lightweight IDE for building, compiling, and deploying x86 operating systems with a single **Build & Run** workflow. Includes its own built-in compiler for seamless OS development.
 
 ---
 
 ## Overview
 
-OSDev-IDE simplifies the OS development process by integrating editing, compilation, and execution in one environment.  
+OSDev-IDE simplifies the OS development process on Windows by integrating editing, compilation, and execution in one environment.  
 
 Key features:
 
 - One-click Build & Run workflow
-- Bootstrapping compiler and toolchain included
+- Built-in compiler included (no need for external toolchains)
 - Supports C, Assembly, and custom OS pipelines
 - Integrated emulator for testing
 
@@ -23,8 +23,8 @@ Key features:
 ### Prerequisites
 
 - Windows 10 or 11
-- Visual Studio with .NET Desktop workloads
-- Required OS toolchains (documented in the `docs/` folder)
+- Visual Studio (for building the IDE itself)
+- No external compiler is required — OSDev-IDE provides its own
 
 ### Installation
 
@@ -52,20 +52,18 @@ Key features:
 
 ### Build and Run
 
-- **Build** – Compiles the OS source using the integrated toolchain
-- **Run** – Launches the OS in the configured emulator
+- **Build** – Compiles the OS source using the **built-in compiler**
+- **Run** – Launches the OS in the integrated emulator
 
 ### Command Reference
 
 ```bash
-# Example build command
-make all
+# Example build command (handled internally by the IDE)
+build
 
-# Example boot command
-emulator -drive format=raw,file=os.img
+# Example run command
+run
 ```
-
-*(Replace with your actual integrated commands.)*
 
 ---
 
@@ -73,7 +71,7 @@ emulator -drive format=raw,file=os.img
 
 ```
 /OSDev-IDE
-  /BootstrapCompiler      - Compiler tooling
+  /BootstrapCompiler      - IDE's built-in compiler source
   /IDE                    - IDE source code
   /x64                    - x86 tooling and samples
   /docs                   - Additional documentation
@@ -87,6 +85,7 @@ emulator -drive format=raw,file=os.img
 | Feature                     | Status        |
 |-----------------------------|---------------|
 | One-click Build & Run       | Supported     |
+| Built-in compiler           | Supported     |
 | C & Assembly compilation    | Supported     |
 | Emulator integration        | Supported     |
 | Debug & breakpoint support  | In progress   |
