@@ -125,11 +125,7 @@ Follow existing code style and add tests where appropriate.
 
 ## License
 
-OSDev-IDE is released under the **[LICENSE NAME]**.  
-Replace this with your chosen license (e.g., MIT, Apache 2.0).
+OSDev-IDE is released under the deez nutz licese or however u spell it
 
 ---
 
-## Acknowledgments
-
-Thanks to the OSDev community and contributors who helped improve this IDE.
