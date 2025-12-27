@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "dgSpecHash": "jk0hcfR0zcE=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\aiden\\OneDrive\\Desktop\\compiler\\BootstrapCompiler\\IDE\\IDE.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\aiden\\.nuget\\packages\\materialdesigncolors\\5.3.0\\materialdesigncolors.5.3.0.nupkg.sha512",
+    "C:\\Users\\aiden\\.nuget\\packages\\materialdesignthemes\\5.3.0\\materialdesignthemes.5.3.0.nupkg.sha512",
+    "C:\\Users\\aiden\\.nuget\\packages\\materialdesignthemes.wpf\\1.0.1\\materialdesignthemes.wpf.1.0.1.nupkg.sha512",
+    "C:\\Users\\aiden\\.nuget\\packages\\microsoft.csharp\\4.6.0\\microsoft.csharp.4.6.0.nupkg.sha512",
+    "C:\\Users\\aiden\\.nuget\\packages\\microsoft.xaml.behaviors.wpf\\1.1.77\\microsoft.xaml.behaviors.wpf.1.1.77.nupkg.sha512",
+    "C:\\Users\\aiden\\.nuget\\packages\\quicker.avalonedit\\6.3.1\\quicker.avalonedit.6.3.1.nupkg.sha512",
+    "C:\\Users\\aiden\\.nuget\\packages\\system.data.datasetextensions\\4.6.0-preview3.19128.7\\system.data.datasetextensions.4.6.0-preview3.19128.7.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,583 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0-windows7.0": {
+      "MaterialDesignColors/5.3.0": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0-windows7.0/MaterialDesignColors.dll": {}
+        },
+        "runtime": {
+          "lib/net8.0-windows7.0/MaterialDesignColors.dll": {}
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App.WPF"
+        ]
+      },
+      "MaterialDesignThemes/5.3.0": {
+        "type": "package",
+        "dependencies": {
+          "MaterialDesignColors": "5.3.0",
+          "Microsoft.Xaml.Behaviors.Wpf": "1.1.77"
+        },
+        "compile": {
+          "lib/net8.0-windows7.0/MaterialDesignThemes.Wpf.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0-windows7.0/MaterialDesignThemes.Wpf.dll": {
+            "related": ".xml"
+          }
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App.WPF"
+        ],
+        "contentFiles": {
+          "contentFiles/any/net8.0-windows7.0/Resources/Noto/NotoSans-Bold.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Noto/NotoSans-BoldItalic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Noto/NotoSans-Italic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Noto/NotoSans-Regular.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Black.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-BlackItalic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Bold.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-BoldItalic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Italic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Light.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-LightItalic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Medium.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-MediumItalic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Regular.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Thin.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-ThinItalic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-Bold.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-BoldItalic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-Italic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-Light.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-LightItalic.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          },
+          "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-Regular.ttf": {
+            "buildAction": "Content",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          }
+        },
+        "build": {
+          "build/MaterialDesignThemes.targets": {}
+        }
+      },
+      "MaterialDesignThemes.Wpf/1.0.1": {
+        "type": "package",
+        "dependencies": {
+          "MaterialDesignColors": "1.0.1",
+          "Microsoft.CSharp": "4.6.0",
+          "System.Data.DataSetExtensions": "4.6.0-preview3.19128.7"
+        },
+        "compile": {
+          "lib/netcoreapp3.0/MaterialDesignThemes.Wpf.dll": {}
+        },
+        "runtime": {
+          "lib/netcoreapp3.0/MaterialDesignThemes.Wpf.dll": {}
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App.WPF"
+        ]
+      },
+      "Microsoft.CSharp/4.6.0": {
+        "type": "package",
+        "compile": {
+          "ref/netcoreapp2.0/_._": {}
+        },
+        "runtime": {
+          "lib/netcoreapp2.0/_._": {}
+        }
+      },
+      "Microsoft.Xaml.Behaviors.Wpf/1.1.77": {
+        "type": "package",
+        "compile": {
+          "lib/net6.0-windows7.0/Microsoft.Xaml.Behaviors.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/net6.0-windows7.0/Microsoft.Xaml.Behaviors.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App.WPF"
+        ]
+      },
+      "Quicker.AvalonEdit/6.3.1": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0-windows7.0/ICSharpCode.AvalonEdit.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0-windows7.0/ICSharpCode.AvalonEdit.dll": {
+            "related": ".xml"
+          }
+        },
+        "frameworkReferences": [
+          "Microsoft.WindowsDesktop.App"
+        ]
+      },
+      "System.Data.DataSetExtensions/4.6.0-preview3.19128.7": {
+        "type": "package",
+        "compile": {
+          "ref/netstandard2.0/System.Data.DataSetExtensions.dll": {}
+        },
+        "runtime": {
+          "lib/netstandard2.0/System.Data.DataSetExtensions.dll": {
+            "related": ".xml"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "MaterialDesignColors/5.3.0": {
+      "sha512": "2+gcPqbWB3f9vvpCXb7SMhObt9aYSIIIkycYjnctnq4smAfzflwTcMQbG3UjiUYKoTbAy4+RXO0tugLX33YhiA==",
+      "type": "package",
+      "path": "materialdesigncolors/5.3.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "MaterialDesign.Icon.png",
+        "README.md",
+        "lib/net462/MaterialDesignColors.dll",
+        "lib/net8.0-windows7.0/MaterialDesignColors.dll",
+        "materialdesigncolors.5.3.0.nupkg.sha512",
+        "materialdesigncolors.nuspec"
+      ]
+    },
+    "MaterialDesignThemes/5.3.0": {
+      "sha512": "jIKeR2JzUGslVn2EU5bvAXj4EJpw3wf289VsTf0evtg/czFIomPswqBGfpO7In67rpFwQzR+E+/df/Q9i43a0Q==",
+      "type": "package",
+      "path": "materialdesignthemes/5.3.0",
+      "hasTools": true,
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "MaterialDesign.Icon.png",
+        "README.md",
+        "build/MaterialDesignThemes.targets",
+        "build/Resources/Roboto/Roboto-Black.ttf",
+        "build/Resources/Roboto/Roboto-BlackItalic.ttf",
+        "build/Resources/Roboto/Roboto-Bold.ttf",
+        "build/Resources/Roboto/Roboto-BoldItalic.ttf",
+        "build/Resources/Roboto/Roboto-Italic.ttf",
+        "build/Resources/Roboto/Roboto-Light.ttf",
+        "build/Resources/Roboto/Roboto-LightItalic.ttf",
+        "build/Resources/Roboto/Roboto-Medium.ttf",
+        "build/Resources/Roboto/Roboto-MediumItalic.ttf",
+        "build/Resources/Roboto/Roboto-Regular.ttf",
+        "build/Resources/Roboto/Roboto-Thin.ttf",
+        "build/Resources/Roboto/Roboto-ThinItalic.ttf",
+        "build/Resources/Roboto/RobotoCondensed-Bold.ttf",
+        "build/Resources/Roboto/RobotoCondensed-BoldItalic.ttf",
+        "build/Resources/Roboto/RobotoCondensed-Italic.ttf",
+        "build/Resources/Roboto/RobotoCondensed-Light.ttf",
+        "build/Resources/Roboto/RobotoCondensed-LightItalic.ttf",
+        "build/Resources/Roboto/RobotoCondensed-Regular.ttf",
+        "content/Resources/Noto/NotoSans-Bold.ttf",
+        "content/Resources/Noto/NotoSans-BoldItalic.ttf",
+        "content/Resources/Noto/NotoSans-Italic.ttf",
+        "content/Resources/Noto/NotoSans-Regular.ttf",
+        "content/Resources/Roboto/Roboto-Black.ttf",
+        "content/Resources/Roboto/Roboto-BlackItalic.ttf",
+        "content/Resources/Roboto/Roboto-Bold.ttf",
+        "content/Resources/Roboto/Roboto-BoldItalic.ttf",
+        "content/Resources/Roboto/Roboto-Italic.ttf",
+        "content/Resources/Roboto/Roboto-Light.ttf",
+        "content/Resources/Roboto/Roboto-LightItalic.ttf",
+        "content/Resources/Roboto/Roboto-Medium.ttf",
+        "content/Resources/Roboto/Roboto-MediumItalic.ttf",
+        "content/Resources/Roboto/Roboto-Regular.ttf",
+        "content/Resources/Roboto/Roboto-Thin.ttf",
+        "content/Resources/Roboto/Roboto-ThinItalic.ttf",
+        "content/Resources/Roboto/RobotoCondensed-Bold.ttf",
+        "content/Resources/Roboto/RobotoCondensed-BoldItalic.ttf",
+        "content/Resources/Roboto/RobotoCondensed-Italic.ttf",
+        "content/Resources/Roboto/RobotoCondensed-Light.ttf",
+        "content/Resources/Roboto/RobotoCondensed-LightItalic.ttf",
+        "content/Resources/Roboto/RobotoCondensed-Regular.ttf",
+        "contentFiles/any/net462/Resources/Noto/NotoSans-Bold.ttf",
+        "contentFiles/any/net462/Resources/Noto/NotoSans-BoldItalic.ttf",
+        "contentFiles/any/net462/Resources/Noto/NotoSans-Italic.ttf",
+        "contentFiles/any/net462/Resources/Noto/NotoSans-Regular.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-Black.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-BlackItalic.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-Bold.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-BoldItalic.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-Italic.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-Light.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-LightItalic.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-Medium.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-MediumItalic.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-Regular.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-Thin.ttf",
+        "contentFiles/any/net462/Resources/Roboto/Roboto-ThinItalic.ttf",
+        "contentFiles/any/net462/Resources/Roboto/RobotoCondensed-Bold.ttf",
+        "contentFiles/any/net462/Resources/Roboto/RobotoCondensed-BoldItalic.ttf",
+        "contentFiles/any/net462/Resources/Roboto/RobotoCondensed-Italic.ttf",
+        "contentFiles/any/net462/Resources/Roboto/RobotoCondensed-Light.ttf",
+        "contentFiles/any/net462/Resources/Roboto/RobotoCondensed-LightItalic.ttf",
+        "contentFiles/any/net462/Resources/Roboto/RobotoCondensed-Regular.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Noto/NotoSans-Bold.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Noto/NotoSans-BoldItalic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Noto/NotoSans-Italic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Noto/NotoSans-Regular.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Black.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-BlackItalic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Bold.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-BoldItalic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Italic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Light.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-LightItalic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Medium.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-MediumItalic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Regular.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-Thin.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/Roboto-ThinItalic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-Bold.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-BoldItalic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-Italic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-Light.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-LightItalic.ttf",
+        "contentFiles/any/net8.0-windows7.0/Resources/Roboto/RobotoCondensed-Regular.ttf",
+        "lib/net462/MaterialDesignThemes.Wpf.dll",
+        "lib/net462/MaterialDesignThemes.Wpf.xml",
+        "lib/net8.0-windows7.0/MaterialDesignThemes.Wpf.dll",
+        "lib/net8.0-windows7.0/MaterialDesignThemes.Wpf.xml",
+        "materialdesignthemes.5.3.0.nupkg.sha512",
+        "materialdesignthemes.nuspec",
+        "tools/VisualStudioToolsManifest.xml"
+      ]
+    },
+    "MaterialDesignThemes.Wpf/1.0.1": {
+      "sha512": "goEShYguOoPYJ+oBtWWMEsZFK5CL+524m2fekyLQaMkcECu2K9mYv0yJiXARQM6qr6YdF6iDuR0Bx9BunrLFzQ==",
+      "type": "package",
+      "path": "materialdesignthemes.wpf/1.0.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net45/MaterialDesignThemes.Wpf.dll",
+        "lib/netcoreapp3.0/MaterialDesignThemes.Wpf.dll",
+        "materialdesignthemes.wpf.1.0.1.nupkg.sha512",
+        "materialdesignthemes.wpf.nuspec"
+      ]
+    },
+    "Microsoft.CSharp/4.6.0": {
+      "sha512": "kxn3M2rnAGy5N5DgcIwcE8QTePWU/XiYcQVzn9HqTls2NKluVzVSmVWRjK7OUPWbljCXuZxHyhEz9kPRIQeXow==",
+      "type": "package",
+      "path": "microsoft.csharp/4.6.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/MonoAndroid10/_._",
+        "lib/MonoTouch10/_._",
+        "lib/net45/_._",
+        "lib/netcore50/Microsoft.CSharp.dll",
+        "lib/netcoreapp2.0/_._",
+        "lib/netstandard1.3/Microsoft.CSharp.dll",
+        "lib/netstandard2.0/Microsoft.CSharp.dll",
+        "lib/netstandard2.0/Microsoft.CSharp.xml",
+        "lib/portable-net45+win8+wp8+wpa81/_._",
+        "lib/uap10.0.16299/_._",
+        "lib/win8/_._",
+        "lib/wp80/_._",
+        "lib/wpa81/_._",
+        "lib/xamarinios10/_._",
+        "lib/xamarinmac20/_._",
+        "lib/xamarintvos10/_._",
+        "lib/xamarinwatchos10/_._",
+        "microsoft.csharp.4.6.0.nupkg.sha512",
+        "microsoft.csharp.nuspec",
+        "ref/MonoAndroid10/_._",
+        "ref/MonoTouch10/_._",
+        "ref/net45/_._",
+        "ref/netcore50/Microsoft.CSharp.dll",
+        "ref/netcore50/Microsoft.CSharp.xml",
+        "ref/netcore50/de/Microsoft.CSharp.xml",
+        "ref/netcore50/es/Microsoft.CSharp.xml",
+        "ref/netcore50/fr/Microsoft.CSharp.xml",
+        "ref/netcore50/it/Microsoft.CSharp.xml",
+        "ref/netcore50/ja/Microsoft.CSharp.xml",
+        "ref/netcore50/ko/Microsoft.CSharp.xml",
+        "ref/netcore50/ru/Microsoft.CSharp.xml",
+        "ref/netcore50/zh-hans/Microsoft.CSharp.xml",
+        "ref/netcore50/zh-hant/Microsoft.CSharp.xml",
+        "ref/netcoreapp2.0/_._",
+        "ref/netstandard1.0/Microsoft.CSharp.dll",
+        "ref/netstandard1.0/Microsoft.CSharp.xml",
+        "ref/netstandard1.0/de/Microsoft.CSharp.xml",
+        "ref/netstandard1.0/es/Microsoft.CSharp.xml",
+        "ref/netstandard1.0/fr/Microsoft.CSharp.xml",
+        "ref/netstandard1.0/it/Microsoft.CSharp.xml",
+        "ref/netstandard1.0/ja/Microsoft.CSharp.xml",
+        "ref/netstandard1.0/ko/Microsoft.CSharp.xml",
+        "ref/netstandard1.0/ru/Microsoft.CSharp.xml",
+        "ref/netstandard1.0/zh-hans/Microsoft.CSharp.xml",
+        "ref/netstandard1.0/zh-hant/Microsoft.CSharp.xml",
+        "ref/netstandard2.0/Microsoft.CSharp.dll",
+        "ref/netstandard2.0/Microsoft.CSharp.xml",
+        "ref/portable-net45+win8+wp8+wpa81/_._",
+        "ref/uap10.0.16299/_._",
+        "ref/win8/_._",
+        "ref/wp80/_._",
+        "ref/wpa81/_._",
+        "ref/xamarinios10/_._",
+        "ref/xamarinmac20/_._",
+        "ref/xamarintvos10/_._",
+        "ref/xamarinwatchos10/_._",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    },
+    "Microsoft.Xaml.Behaviors.Wpf/1.1.77": {
+      "sha512": "MCu674ZETgU18EbxfwIlRpUPJ02YbZenLsMCXTkpeA7KUBpXfFaOUDlEO+7UWu5AFnUoydg+aQENJkuaZPheMQ==",
+      "type": "package",
+      "path": "microsoft.xaml.behaviors.wpf/1.1.77",
+      "hasTools": true,
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "lib/net462/Design/Microsoft.Xaml.Behaviors.Design.dll",
+        "lib/net462/Design/Microsoft.Xaml.Behaviors.DesignTools.dll",
+        "lib/net462/Microsoft.Xaml.Behaviors.dll",
+        "lib/net462/Microsoft.Xaml.Behaviors.pdb",
+        "lib/net462/Microsoft.Xaml.Behaviors.xml",
+        "lib/net6.0-windows7.0/Design/Microsoft.Xaml.Behaviors.DesignTools.dll",
+        "lib/net6.0-windows7.0/Microsoft.Xaml.Behaviors.dll",
+        "lib/net6.0-windows7.0/Microsoft.Xaml.Behaviors.pdb",
+        "lib/net6.0-windows7.0/Microsoft.Xaml.Behaviors.xml",
+        "microsoft.xaml.behaviors.wpf.1.1.77.nupkg.sha512",
+        "microsoft.xaml.behaviors.wpf.nuspec",
+        "tools/Install.ps1"
+      ]
+    },
+    "Quicker.AvalonEdit/6.3.1": {
+      "sha512": "m4mrkEV+fRUPj5nYaBA7NLAq8kBqaafleXZzjA8XpelmQSUMhRdgs04e82LycqrtJK400ToKlCgoq5s97WbOxw==",
+      "type": "package",
+      "path": "quicker.avalonedit/6.3.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "PackageReadme.md",
+        "images/AvalonEditNuGetPackageIcon.png",
+        "lib/net462/ICSharpCode.AvalonEdit.dll",
+        "lib/net462/ICSharpCode.AvalonEdit.xml",
+        "lib/net8.0-windows7.0/ICSharpCode.AvalonEdit.dll",
+        "lib/net8.0-windows7.0/ICSharpCode.AvalonEdit.xml",
+        "quicker.avalonedit.6.3.1.nupkg.sha512",
+        "quicker.avalonedit.nuspec"
+      ]
+    },
+    "System.Data.DataSetExtensions/4.6.0-preview3.19128.7": {
+      "sha512": "ZFJYYi41Wf4xlFKuuRUblw8yThgzBTYeZTs7eGU7sDiu+X+BmeIdT3pstCrmLpDyflDIBuKX1VYmBCGKo14h6w==",
+      "type": "package",
+      "path": "system.data.datasetextensions/4.6.0-preview3.19128.7",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.TXT",
+        "THIRD-PARTY-NOTICES.TXT",
+        "lib/net45/_._",
+        "lib/netstandard2.0/System.Data.DataSetExtensions.dll",
+        "lib/netstandard2.0/System.Data.DataSetExtensions.xml",
+        "ref/net45/_._",
+        "ref/netstandard2.0/System.Data.DataSetExtensions.dll",
+        "system.data.datasetextensions.4.6.0-preview3.19128.7.nupkg.sha512",
+        "system.data.datasetextensions.nuspec",
+        "useSharedDesignerContext.txt",
+        "version.txt"
+      ]
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0-windows7.0": [
+      "MaterialDesignColors >= 5.3.0",
+      "MaterialDesignThemes >= 5.3.0",
+      "MaterialDesignThemes.Wpf >= 1.0.1",
+      "Quicker.AvalonEdit >= 6.3.1"
+    ]
+  },
+  "packageFolders": {
+    "C:\\Users\\aiden\\.nuget\\packages\\": {},
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "C:\\Users\\aiden\\OneDrive\\Desktop\\compiler\\BootstrapCompiler\\IDE\\IDE.csproj",
+      "projectName": "IDE",
+      "projectPath": "C:\\Users\\aiden\\OneDrive\\Desktop\\compiler\\BootstrapCompiler\\IDE\\IDE.csproj",
+      "packagesPath": "C:\\Users\\aiden\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\aiden\\OneDrive\\Desktop\\compiler\\BootstrapCompiler\\IDE\\obj\\",
+      "projectStyle": "PackageReference",
+      "fallbackFolders": [
+        "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+      ],
+      "configFilePaths": [
+        "C:\\Users\\aiden\\AppData\\Roaming\\NuGet\\NuGet.Config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+        "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0-windows"
+      ],
+      "sources": {
+        "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0-windows7.0": {
+          "targetAlias": "net8.0-windows",
+          "projectReferences": {}
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "9.0.100"
+    },
+    "frameworks": {
+      "net8.0-windows7.0": {
+        "targetAlias": "net8.0-windows",
+        "dependencies": {
+          "MaterialDesignColors": {
+            "target": "Package",
+            "version": "[5.3.0, )"
+          },
+          "MaterialDesignThemes": {
+            "target": "Package",
+            "version": "[5.3.0, )"
+          },
+          "MaterialDesignThemes.Wpf": {
+            "target": "Package",
+            "version": "[1.0.1, )"
+          },
+          "Quicker.AvalonEdit": {
+            "target": "Package",
+            "version": "[6.3.1, )"
+          }
+        },
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          },
+          "Microsoft.WindowsDesktop.App.WPF": {
+            "privateAssets": "none"
+          }
+        },
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.102/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}
