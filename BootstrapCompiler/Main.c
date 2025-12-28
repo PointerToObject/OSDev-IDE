@@ -1,7 +1,5 @@
 #include "Main.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+
 
 /* ====================== AST Printer ====================== */
 
@@ -200,10 +198,35 @@ int main(int argc, char** argv)
     fclose(f);
     src[file_size] = '\0';
 
-    printf("=== SOURCE CODE ===\n%s\n", src);
+    // PREPROCESS - handle #include and #define
+    printf("=== PREPROCESSING ===\n");
 
-    // Tokenize
-    Scanner* scanner = scanner_create(src);
+    // Extract base directory from input file path
+    char base_dir[512] = ".";
+    const char* last_slash = strrchr(input_file, '/');
+    const char* last_backslash = strrchr(input_file, '\\');
+    const char* separator = last_slash > last_backslash ? last_slash : last_backslash;
+
+    if (separator) {
+        size_t dir_len = separator - input_file;
+        if (dir_len < sizeof(base_dir)) {
+            memcpy(base_dir, input_file, dir_len);
+            base_dir[dir_len] = '\0';
+        }
+    }
+
+    char* preprocessed = preprocess(src, base_dir);
+    free(src);
+
+    if (!preprocessed) {
+        fprintf(stderr, "Preprocessing failed\n");
+        return 1;
+    }
+
+    printf("=== SOURCE CODE (after preprocessing) ===\n%s\n", preprocessed);
+
+    // Tokenize the preprocessed source
+    Scanner* scanner = scanner_create(preprocessed);
     size_t capacity = 128;
     size_t token_count = 0;
     Token** token_ptrs = (Token**)malloc(capacity * sizeof(Token*));
@@ -237,7 +260,7 @@ int main(int argc, char** argv)
             token_free(token_ptrs[i]);
         }
         free(token_ptrs);
-        free(src);
+        free(preprocessed);
         return 1;
     }
 
@@ -291,7 +314,7 @@ int main(int argc, char** argv)
     free(token_ptrs);
     free(tokens);
     ast_free(program);
-    free(src);
+    free(preprocessed);
 
     printf("\n=== COMPILATION COMPLETE ===\n");
 

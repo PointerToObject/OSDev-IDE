@@ -138,6 +138,23 @@ Tokens check_keyword(const char* word)
     if (strcmp(word, "sizeof") == 0) return TOKEN_SIZEOF;
     if (strcmp(word, "break") == 0) return TOKEN_BREAK;
     if (strcmp(word, "continue") == 0) return TOKEN_CONTINUE;
+
+    // NEW: Kernel keywords
+    if (strcmp(word, "inline") == 0) return TOKEN_INLINE;
+    if (strcmp(word, "static") == 0) return TOKEN_STATIC;
+    if (strcmp(word, "extern") == 0) return TOKEN_EXTERN;
+    if (strcmp(word, "volatile") == 0) return TOKEN_VOLATILE;
+    if (strcmp(word, "const") == 0) return TOKEN_CONST;
+    if (strcmp(word, "unsigned") == 0) return TOKEN_UNSIGNED;
+    if (strcmp(word, "signed") == 0) return TOKEN_SIGNED;
+    if (strcmp(word, "long") == 0) return TOKEN_LONG;
+    if (strcmp(word, "short") == 0) return TOKEN_SHORT;
+    if (strcmp(word, "register") == 0) return TOKEN_REGISTER;
+    if (strcmp(word, "asm") == 0) return TOKEN_ASM;
+    if (strcmp(word, "__asm__") == 0) return TOKEN_ASM;
+    if (strcmp(word, "__packed") == 0) return TOKEN_PACKED;
+    if (strcmp(word, "__attribute__") == 0) return TOKEN_IDENTIFIER;
+
     return TOKEN_IDENTIFIER;
 }
 
@@ -159,7 +176,6 @@ Token* scan_identifier(Scanner* s)
     return token_create(type, word, line, column);
 }
 
-
 Token* scan_number(Scanner* s)
 {
     int start = s->offset;
@@ -169,28 +185,23 @@ Token* scan_number(Scanner* s)
     int num_idx = 0;
     int value = 0;
 
-    // Check for hexadecimal: 0x or 0X
     if (peek(s) == '0' && (peek_next(s) == 'x' || peek_next(s) == 'X'))
     {
         advance(s); // '0'
         advance(s); // 'x' or 'X'
 
-        // Read hex digits
         while (isxdigit(peek(s)))
         {
             num_buffer[num_idx++] = advance(s);
         }
         num_buffer[num_idx] = '\0';
 
-        // Convert hex to decimal
         value = (int)strtol(num_buffer, NULL, 16);
 
-        // Create word as decimal string
         char* word = (char*)malloc(32);
         sprintf(word, "%d", value);
         return token_create(TOKEN_NUMBER, word, line, column);
     }
-    // Regular decimal number
     else
     {
         while (isdigit(peek(s)))
@@ -233,7 +244,6 @@ Token* scan_string(Scanner* s)
 
     if (peek(s) != '"')
     {
-        // Unterminated string
         return token_create(TOKEN_ERROR, word, line, column);
     }
 
@@ -247,29 +257,46 @@ Token* scan_char(Scanner* s)
     int column = s->column;
     advance(s); // opening '
 
-    int start = s->offset;
+    char char_value;
 
     if (peek(s) == '\\')
     {
-        advance(s);
-        if (peek(s) != '\0') advance(s);
+        advance(s); // backslash
+        char escaped = advance(s);
+        switch (escaped) {
+        case 'n': char_value = 10; break;
+        case 'r': char_value = 13; break;
+        case 't': char_value = 9; break;
+        case 'b': char_value = 8; break;
+        case '0': char_value = 0; break;
+        case '\\': char_value = '\\'; break;
+        case '\'': char_value = '\''; break;
+        case '"': char_value = '"'; break;
+        default: char_value = escaped; break;
+        }
     }
     else if (peek(s) != '\0' && peek(s) != '\n' && peek(s) != '\'')
     {
-        advance(s);
+        char_value = advance(s);
     }
-
-    int len = s->offset - start;
-    char* word = (char*)malloc(len + 1);
-    memcpy(word, s->src + start, len);
-    word[len] = '\0';
+    else
+    {
+        char_value = 0;
+    }
 
     if (peek(s) != '\'')
     {
+        char* word = (char*)malloc(2);
+        word[0] = char_value;
+        word[1] = '\0';
         return token_create(TOKEN_ERROR, word, line, column);
     }
 
     advance(s); // closing '
+
+    char* word = (char*)malloc(2);
+    word[0] = char_value;
+    word[1] = '\0';
     return token_create(TOKEN_CHAR, word, line, column);
 }
 
@@ -284,30 +311,24 @@ Token* tokenize(Scanner* s)
     int line = s->line;
     int column = s->column;
 
-    // Preprocessor directive: skip entire line
     if (c == '#')
     {
         skip_preprocessor_line(s);
-        return tokenize(s); // recurse to get next token
+        return tokenize(s);
     }
 
-    // Identifiers / keywords
     if (isalpha(c) || c == '_')
         return scan_identifier(s);
 
-    // Numbers
     if (isdigit(c))
         return scan_number(s);
 
-    // Strings
     if (c == '"')
         return scan_string(s);
 
-    // Chars
     if (c == '\'')
         return scan_char(s);
 
-    // Multi-char operators
     if (c == '+')
     {
         advance(s);
@@ -383,7 +404,6 @@ Token* tokenize(Scanner* s)
         return token_create(TOKEN_PIPE, _strdup("|"), line, column);
     }
 
-    // Single-char tokens
     advance(s);
     switch (c)
     {
@@ -410,5 +430,3 @@ Token* tokenize(Scanner* s)
     }
     }
 }
-
-/* ====================== Main ====================== */

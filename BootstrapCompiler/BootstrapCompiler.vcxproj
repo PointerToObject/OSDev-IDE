@@ -132,12 +132,14 @@
     <ClInclude Include="Includes.h" />
     <ClInclude Include="Main.h" />
     <ClInclude Include="Parser\Parser.h" />
+    <ClInclude Include="Tokenizer\Preprocessor\Preprocessor.h" />
     <ClInclude Include="Tokenizer\Tokenizer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Codegen\CodeGen\Codegen.c" />
     <ClCompile Include="Main.c" />
     <ClCompile Include="Parser\Parser\Parser.c" />
+    <ClCompile Include="Tokenizer\Preprocessor\src\Preprocessor.c" />
     <ClCompile Include="Tokenizer\Scanner\Tokenizer.c" />
   </ItemGroup>
   <ItemGroup>

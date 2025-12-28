@@ -1,7 +1,49 @@
 #include "../Parser.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+
+/* ====================== Typedef Table (NEW) ====================== */
+
+#define MAX_TYPEDEFS 256
+
+typedef struct {
+    char* alias;        // The new name (e.g., "uint8_t")
+    char* real_type;    // The underlying type (e.g., "unsigned char")
+    int pointer_level;  // If typedef includes pointer (e.g., typedef int* IntPtr)
+} TypedefEntry;
+
+typedef struct {
+    TypedefEntry entries[MAX_TYPEDEFS];
+    int count;
+} TypedefTable;
+
+static TypedefTable g_typedefs = { .count = 0 };
+
+void typedef_table_init() {
+    g_typedefs.count = 0;
+}
+
+void typedef_table_add(const char* alias, const char* real_type, int ptr_level) {
+    if (g_typedefs.count >= MAX_TYPEDEFS) {
+        fprintf(stderr, "Too many typedefs\n");
+        return;
+    }
+    g_typedefs.entries[g_typedefs.count].alias = _strdup(alias);
+    g_typedefs.entries[g_typedefs.count].real_type = _strdup(real_type);
+    g_typedefs.entries[g_typedefs.count].pointer_level = ptr_level;
+    g_typedefs.count++;
+}
+
+TypedefEntry* typedef_table_lookup(const char* name) {
+    for (int i = 0; i < g_typedefs.count; i++) {
+        if (strcmp(g_typedefs.entries[i].alias, name) == 0) {
+            return &g_typedefs.entries[i];
+        }
+    }
+    return NULL;
+}
+
+int is_typedef_name(const char* name) {
+    return typedef_table_lookup(name) != NULL;
+}
 
 /* ====================== Parser Basics ====================== */
 
@@ -11,6 +53,7 @@ Parser* parser_create(Token* tokens, size_t len)
     p->tokens = tokens;
     p->pos = 0;
     p->len = len;
+    typedef_table_init();  // NEW: Reset typedef table
     return p;
 }
 
@@ -66,15 +109,33 @@ Token expect(Parser* p, Tokens expected)
     return t;
 }
 
-int is_hex_digit(char c) 
+int is_hex_digit(char c)
 {
     return (c >= '0' && c <= '9') ||
         (c >= 'a' && c <= 'f') ||
         (c >= 'A' && c <= 'F');
 }
 
+/* NEW: Check if current token starts a type */
+int is_type_token(Parser* p) {
+    Token t = peek_token(p);
+    if (t.type == TOKEN_INT || t.type == TOKEN_CHAR_KW || t.type == TOKEN_VOID ||
+        t.type == TOKEN_STRUCT || t.type == TOKEN_ENUM ||
+        t.type == TOKEN_UNSIGNED || t.type == TOKEN_SIGNED ||
+        t.type == TOKEN_LONG || t.type == TOKEN_SHORT ||
+        t.type == TOKEN_CONST || t.type == TOKEN_VOLATILE ||
+        t.type == TOKEN_STATIC || t.type == TOKEN_EXTERN ||
+        t.type == TOKEN_REGISTER) {
+        return 1;
+    }
+    // Check if it's a typedef name
+    if (t.type == TOKEN_IDENTIFIER && is_typedef_name(t.word)) {
+        return 1;
+    }
+    return 0;
+}
+
 /* ====================== Node Creation ====================== */
-/* (Unchanged from your original — assuming these match your AST union in Parser.h) */
 
 AST* create_intlit_node(int value)
 {
@@ -153,6 +214,14 @@ AST* create_decl_node(char* type, char* name, int pointer_level, AST* init, AST*
     node->data.decl.pointer_level = pointer_level;
     node->data.decl.init_value = init;
     node->data.decl.array_size = array_size;
+    node->data.decl.is_static = 0;
+    node->data.decl.is_extern = 0;
+    node->data.decl.is_inline = 0;
+    node->data.decl.is_volatile = 0;
+    node->data.decl.is_const = 0;
+    node->data.decl.is_unsigned = 0;
+    node->data.decl.is_register = 0;
+    node->data.decl.is_packed = 0;
     return node;
 }
 
@@ -175,6 +244,9 @@ AST* create_function_node(char* return_type, char* name, AST** params, size_t pa
     node->data.function.params = params;
     node->data.function.param_count = param_count;
     node->data.function.body = body;
+    node->data.function.is_static = 0;
+    node->data.function.is_inline = 0;
+    node->data.function.is_extern = 0;
     return node;
 }
 
@@ -293,6 +365,15 @@ AST* create_ternary_node(AST* condition, AST* true_expr, AST* false_expr)
     return node;
 }
 
+AST* create_asm_node(char* code, int is_volatile)
+{
+    AST* node = (AST*)malloc(sizeof(AST));
+    node->type = N_ASM;
+    node->data.asm_stmt.assembly_code = _strdup(code);
+    node->data.asm_stmt.is_volatile = is_volatile;
+    return node;
+}
+
 AST* create_program_node()
 {
     AST* node = (AST*)malloc(sizeof(AST));
@@ -346,9 +427,13 @@ void program_add_global(AST* program, AST* global)
 }
 
 /* ====================== Expression Parsing ====================== */
+AST* parse_expression(Parser* p);
+AST* parse_unary(Parser* p);
+AST* parse_assignment(Parser* p);
+AST* parse_statement(Parser* p);
+AST* parse_declaration(Parser* p);
 
-
-static AST* parse_primary(Parser* p)
+AST* parse_primary(Parser* p)
 {
     Token t = peek_token(p);
 
@@ -376,32 +461,45 @@ static AST* parse_primary(Parser* p)
     {
         advance_token(p);
 
-        // Check for cast: (Type*) or (Type)
-        // Lookahead to see if it's a cast or just parenthesized expression
+        // Check for cast: (Type*) or (Type) or (TypedefName)
         Token next = peek_token(p);
         if (next.type == TOKEN_INT || next.type == TOKEN_CHAR_KW ||
-            next.type == TOKEN_VOID || next.type == TOKEN_IDENTIFIER)
+            next.type == TOKEN_VOID || next.type == TOKEN_UNSIGNED ||
+            next.type == TOKEN_SIGNED || next.type == TOKEN_LONG ||
+            next.type == TOKEN_SHORT || next.type == TOKEN_STRUCT ||
+            (next.type == TOKEN_IDENTIFIER && is_typedef_name(next.word)))  // NEW: Check typedef
         {
-            // Might be a cast - check if there's a ) or *) coming
             size_t saved = p->pos;
 
+            // Skip type qualifiers
+            while (check_token(p, TOKEN_UNSIGNED) || check_token(p, TOKEN_SIGNED) ||
+                check_token(p, TOKEN_CONST) || check_token(p, TOKEN_VOLATILE))
+            {
+                advance_token(p);
+            }
+
             Token type_tok = advance_token(p);
+
+            // NEW: Resolve typedef to real type for codegen
+            char* resolved_type = type_tok.word;
+            TypedefEntry* tdef = typedef_table_lookup(type_tok.word);
+            if (tdef) {
+                resolved_type = tdef->real_type;
+            }
+
             int stars = 0;
             while (match_token(p, TOKEN_STAR)) stars++;
 
             if (check_token(p, TOKEN_RPAREN))
             {
-                // It's a cast! (Type) or (Type*)
                 expect(p, TOKEN_RPAREN);
                 AST* expr = parse_unary(p);
-                return create_cast_node(type_tok.word, expr);
+                return create_cast_node(resolved_type, expr);
             }
 
-            // Not a cast, restore and parse as parenthesized expression
             p->pos = saved;
         }
 
-        // Regular parenthesized expression
         AST* expr = parse_expression(p);
         expect(p, TOKEN_RPAREN);
         return expr;
@@ -411,17 +509,18 @@ static AST* parse_primary(Parser* p)
         advance_token(p);
         expect(p, TOKEN_LPAREN);
 
-        // Check if it's sizeof(type) or sizeof(expression)
         Token next = peek_token(p);
         if (next.type == TOKEN_INT || next.type == TOKEN_CHAR_KW ||
-            next.type == TOKEN_VOID || next.type == TOKEN_STRUCT)
+            next.type == TOKEN_VOID || next.type == TOKEN_STRUCT ||
+            next.type == TOKEN_UNSIGNED || next.type == TOKEN_SIGNED ||
+            next.type == TOKEN_LONG || next.type == TOKEN_SHORT ||
+            (next.type == TOKEN_IDENTIFIER && is_typedef_name(next.word)))  // NEW
         {
-            // sizeof(type) or sizeof(struct Name)
             char* type_str = NULL;
 
             if (next.type == TOKEN_STRUCT)
             {
-                advance_token(p); // consume 'struct'
+                advance_token(p);
                 Token struct_name = expect(p, TOKEN_IDENTIFIER);
                 size_t len = strlen("struct ") + strlen(struct_name.word) + 1;
                 type_str = (char*)malloc(len);
@@ -431,18 +530,22 @@ static AST* parse_primary(Parser* p)
             else
             {
                 Token type_tok = advance_token(p);
-                type_str = _strdup(type_tok.word);
+                // NEW: Resolve typedef
+                TypedefEntry* tdef = typedef_table_lookup(type_tok.word);
+                if (tdef) {
+                    type_str = _strdup(tdef->real_type);
+                }
+                else {
+                    type_str = _strdup(type_tok.word);
+                }
             }
 
             expect(p, TOKEN_RPAREN);
-
-            // Create a special identifier node for the type
             AST* type_node = create_ident_node(type_str);
             free(type_str);
             return create_sizeof_node(type_node);
         }
 
-        // sizeof(expression)
         AST* expr = parse_expression(p);
         expect(p, TOKEN_RPAREN);
         return create_sizeof_node(expr);
@@ -452,7 +555,7 @@ static AST* parse_primary(Parser* p)
     exit(1);
 }
 
-static AST* parse_postfix(Parser* p)
+AST* parse_postfix(Parser* p)
 {
     AST* expr = parse_primary(p);
 
@@ -460,7 +563,7 @@ static AST* parse_postfix(Parser* p)
     {
         Token t = peek_token(p);
 
-        if (t.type == TOKEN_LPAREN)  // function call
+        if (t.type == TOKEN_LPAREN)
         {
             advance_token(p);
             AST** args = NULL;
@@ -488,14 +591,13 @@ static AST* parse_postfix(Parser* p)
             }
             else
             {
-                // Cleanup on error
                 for (size_t i = 0; i < arg_count; i++) ast_free(args[i]);
                 free(args);
                 fprintf(stderr, "Function pointer calls not supported\n");
                 exit(1);
             }
         }
-        else if (t.type == TOKEN_LBRACKET)  // array access
+        else if (t.type == TOKEN_LBRACKET)
         {
             advance_token(p);
             AST* index = parse_expression(p);
@@ -512,7 +614,6 @@ static AST* parse_postfix(Parser* p)
         else if (t.type == TOKEN_PLUS_PLUS || t.type == TOKEN_MINUS_MINUS)
         {
             advance_token(p);
-            // Treat postfix ++/-- as unary (common simplification)
             expr = create_unary_node(t.type, expr);
         }
         else
@@ -523,7 +624,7 @@ static AST* parse_postfix(Parser* p)
     return expr;
 }
 
-static AST* parse_unary(Parser* p)
+AST* parse_unary(Parser* p)
 {
     Token t = peek_token(p);
     if (t.type == TOKEN_PLUS_PLUS || t.type == TOKEN_MINUS_MINUS ||
@@ -538,8 +639,7 @@ static AST* parse_unary(Parser* p)
     return parse_postfix(p);
 }
 
-/* Precedence climbing functions (unchanged) */
-static AST* parse_multiplicative(Parser* p)
+AST* parse_multiplicative(Parser* p)
 {
     AST* left = parse_unary(p);
     while (1)
@@ -556,17 +656,161 @@ static AST* parse_multiplicative(Parser* p)
     return left;
 }
 
-static AST* parse_additive(Parser* p) { AST* left = parse_multiplicative(p); while (1) { Token t = peek_token(p); if (t.type == TOKEN_PLUS || t.type == TOKEN_MINUS) { advance_token(p); AST* right = parse_multiplicative(p); left = create_operator_node(t.type, left, right); } else break; } return left; }
-static AST* parse_shift(Parser* p) { AST* left = parse_additive(p); while (1) { Token t = peek_token(p); if (t.type == TOKEN_LSHIFT || t.type == TOKEN_RSHIFT) { advance_token(p); AST* right = parse_additive(p); left = create_operator_node(t.type, left, right); } else break; } return left; }
-static AST* parse_relational(Parser* p) { AST* left = parse_shift(p); while (1) { Token t = peek_token(p); if (t.type == TOKEN_LESS || t.type == TOKEN_GREATER || t.type == TOKEN_LESS_EQUAL || t.type == TOKEN_GREATER_EQUAL) { advance_token(p); AST* right = parse_shift(p); left = create_operator_node(t.type, left, right); } else break; } return left; }
-static AST* parse_equality(Parser* p) { AST* left = parse_relational(p); while (1) { Token t = peek_token(p); if (t.type == TOKEN_EQUAL || t.type == TOKEN_NOT_EQUAL) { advance_token(p); AST* right = parse_relational(p); left = create_operator_node(t.type, left, right); } else break; } return left; }
-static AST* parse_bitwise_and(Parser* p) { AST* left = parse_equality(p); while (1) { Token t = peek_token(p); if (t.type == TOKEN_AMPERSAND) { advance_token(p); AST* right = parse_equality(p); left = create_operator_node(t.type, left, right); } else break; } return left; }
-static AST* parse_bitwise_xor(Parser* p) { AST* left = parse_bitwise_and(p); while (1) { Token t = peek_token(p); if (t.type == TOKEN_CARET) { advance_token(p); AST* right = parse_bitwise_and(p); left = create_operator_node(t.type, left, right); } else break; } return left; }
-static AST* parse_bitwise_or(Parser* p) { AST* left = parse_bitwise_xor(p); while (1) { Token t = peek_token(p); if (t.type == TOKEN_PIPE) { advance_token(p); AST* right = parse_bitwise_xor(p); left = create_operator_node(t.type, left, right); } else break; } return left; }
-static AST* parse_logical_and(Parser* p) { AST* left = parse_bitwise_or(p); while (1) { Token t = peek_token(p); if (t.type == TOKEN_AND) { advance_token(p); AST* right = parse_bitwise_or(p); left = create_operator_node(t.type, left, right); } else break; } return left; }
-static AST* parse_logical_or(Parser* p) { AST* left = parse_logical_and(p); while (1) { Token t = peek_token(p); if (t.type == TOKEN_OR) { advance_token(p); AST* right = parse_logical_and(p); left = create_operator_node(t.type, left, right); } else break; } return left; }
+AST* parse_additive(Parser* p)
+{
+    AST* left = parse_multiplicative(p);
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_PLUS || t.type == TOKEN_MINUS)
+        {
+            advance_token(p);
+            AST* right = parse_multiplicative(p);
+            left = create_operator_node(t.type, left, right);
+        }
+        else break;
+    }
+    return left;
+}
 
-static AST* parse_ternary(Parser* p)
+AST* parse_shift(Parser* p)
+{
+    AST* left = parse_additive(p);
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_LSHIFT || t.type == TOKEN_RSHIFT)
+        {
+            advance_token(p);
+            AST* right = parse_additive(p);
+            left = create_operator_node(t.type, left, right);
+        }
+        else break;
+    }
+    return left;
+}
+
+AST* parse_relational(Parser* p)
+{
+    AST* left = parse_shift(p);
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_LESS || t.type == TOKEN_GREATER ||
+            t.type == TOKEN_LESS_EQUAL || t.type == TOKEN_GREATER_EQUAL)
+        {
+            advance_token(p);
+            AST* right = parse_shift(p);
+            left = create_operator_node(t.type, left, right);
+        }
+        else break;
+    }
+    return left;
+}
+
+AST* parse_equality(Parser* p)
+{
+    AST* left = parse_relational(p);
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_EQUAL || t.type == TOKEN_NOT_EQUAL)
+        {
+            advance_token(p);
+            AST* right = parse_relational(p);
+            left = create_operator_node(t.type, left, right);
+        }
+        else break;
+    }
+    return left;
+}
+
+AST* parse_bitwise_and(Parser* p)
+{
+    AST* left = parse_equality(p);
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_AMPERSAND)
+        {
+            advance_token(p);
+            AST* right = parse_equality(p);
+            left = create_operator_node(t.type, left, right);
+        }
+        else break;
+    }
+    return left;
+}
+
+AST* parse_bitwise_xor(Parser* p)
+{
+    AST* left = parse_bitwise_and(p);
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_CARET)
+        {
+            advance_token(p);
+            AST* right = parse_bitwise_and(p);
+            left = create_operator_node(t.type, left, right);
+        }
+        else break;
+    }
+    return left;
+}
+
+AST* parse_bitwise_or(Parser* p)
+{
+    AST* left = parse_bitwise_xor(p);
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_PIPE)
+        {
+            advance_token(p);
+            AST* right = parse_bitwise_xor(p);
+            left = create_operator_node(t.type, left, right);
+        }
+        else break;
+    }
+    return left;
+}
+
+AST* parse_logical_and(Parser* p)
+{
+    AST* left = parse_bitwise_or(p);
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_AND)
+        {
+            advance_token(p);
+            AST* right = parse_bitwise_or(p);
+            left = create_operator_node(t.type, left, right);
+        }
+        else break;
+    }
+    return left;
+}
+
+AST* parse_logical_or(Parser* p)
+{
+    AST* left = parse_logical_and(p);
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_OR)
+        {
+            advance_token(p);
+            AST* right = parse_logical_and(p);
+            left = create_operator_node(t.type, left, right);
+        }
+        else break;
+    }
+    return left;
+}
+
+AST* parse_ternary(Parser* p)
 {
     AST* cond = parse_logical_or(p);
     if (match_token(p, TOKEN_QUESTION))
@@ -579,7 +823,7 @@ static AST* parse_ternary(Parser* p)
     return cond;
 }
 
-static AST* parse_assignment(Parser* p)
+AST* parse_assignment(Parser* p)
 {
     AST* left = parse_ternary(p);
     Token t = peek_token(p);
@@ -606,16 +850,32 @@ AST* parse_expression(Parser* p)
 
 /* ====================== Statements ====================== */
 
-static AST* parse_declaration(Parser* p)
+AST* parse_declaration(Parser* p)
 {
     char* type_str = NULL;
+    int is_static = 0;
+    int is_extern = 0;
+    int is_volatile = 0;
+    int is_const = 0;
+    int is_unsigned = 0;
+    int is_register = 0;
 
-    // Handle struct types: struct Node* x;
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_STATIC) { is_static = 1; advance_token(p); }
+        else if (t.type == TOKEN_EXTERN) { is_extern = 1; advance_token(p); }
+        else if (t.type == TOKEN_VOLATILE) { is_volatile = 1; advance_token(p); }
+        else if (t.type == TOKEN_CONST) { is_const = 1; advance_token(p); }
+        else if (t.type == TOKEN_UNSIGNED) { is_unsigned = 1; advance_token(p); }
+        else if (t.type == TOKEN_REGISTER) { is_register = 1; advance_token(p); }
+        else break;
+    }
+
     if (check_token(p, TOKEN_STRUCT))
     {
-        advance_token(p); // consume 'struct'
+        advance_token(p);
         Token struct_name = expect(p, TOKEN_IDENTIFIER);
-        // Build type string "struct Name" - SAFE allocation
         size_t len = strlen("struct ") + strlen(struct_name.word) + 1;
         type_str = (char*)malloc(len);
         strcpy(type_str, "struct ");
@@ -623,9 +883,18 @@ static AST* parse_declaration(Parser* p)
     }
     else
     {
-        // Regular type: int, char, void, etc.
         Token type_tok = advance_token(p);
-        type_str = _strdup(type_tok.word);
+
+        // NEW: Check if it's a typedef and resolve to real type
+        TypedefEntry* tdef = typedef_table_lookup(type_tok.word);
+        if (tdef) {
+            type_str = _strdup(tdef->real_type);
+            // If typedef has pointer level, we need to handle it
+            // For now, just use the resolved type
+        }
+        else {
+            type_str = _strdup(type_tok.word);
+        }
     }
 
     int ptr_level = 0;
@@ -648,10 +917,18 @@ static AST* parse_declaration(Parser* p)
 
     expect(p, TOKEN_SEMICOLON);
 
-    return create_decl_node(type_str, name_str, ptr_level, init, array_size);
+    AST* node = create_decl_node(type_str, name_str, ptr_level, init, array_size);
+    node->data.decl.is_static = is_static;
+    node->data.decl.is_extern = is_extern;
+    node->data.decl.is_volatile = is_volatile;
+    node->data.decl.is_const = is_const;
+    node->data.decl.is_unsigned = is_unsigned;
+    node->data.decl.is_register = is_register;
+
+    return node;
 }
 
-static AST* parse_block(Parser* p)
+AST* parse_block(Parser* p)
 {
     expect(p, TOKEN_LBRACE);
     AST* block = create_block_node();
@@ -663,7 +940,7 @@ static AST* parse_block(Parser* p)
     return block;
 }
 
-static AST* parse_if_statement(Parser* p)
+AST* parse_if_statement(Parser* p)
 {
     expect(p, TOKEN_IF);
     expect(p, TOKEN_LPAREN);
@@ -676,7 +953,7 @@ static AST* parse_if_statement(Parser* p)
     return create_if_node(cond, then_b, else_b);
 }
 
-static AST* parse_while_statement(Parser* p)
+AST* parse_while_statement(Parser* p)
 {
     expect(p, TOKEN_WHILE);
     expect(p, TOKEN_LPAREN);
@@ -686,7 +963,7 @@ static AST* parse_while_statement(Parser* p)
     return create_while_node(cond, body);
 }
 
-static AST* parse_for_statement(Parser* p)
+AST* parse_for_statement(Parser* p)
 {
     expect(p, TOKEN_FOR);
     expect(p, TOKEN_LPAREN);
@@ -694,7 +971,12 @@ static AST* parse_for_statement(Parser* p)
     AST* init = NULL;
     if (!check_token(p, TOKEN_SEMICOLON))
     {
-        if (peek_token(p).type == TOKEN_INT || peek_token(p).type == TOKEN_CHAR_KW || peek_token(p).type == TOKEN_VOID)
+        Token t = peek_token(p);
+        // NEW: Check for typedef names as type specifiers
+        if (t.type == TOKEN_INT || t.type == TOKEN_CHAR_KW || t.type == TOKEN_VOID ||
+            t.type == TOKEN_UNSIGNED || t.type == TOKEN_SIGNED ||
+            t.type == TOKEN_STATIC || t.type == TOKEN_CONST ||
+            (t.type == TOKEN_IDENTIFIER && is_typedef_name(t.word)))
             init = parse_declaration(p);
         else
         {
@@ -718,7 +1000,7 @@ static AST* parse_for_statement(Parser* p)
     return create_for_node(init, cond, incr, body);
 }
 
-static AST* parse_return_statement(Parser* p)
+AST* parse_return_statement(Parser* p)
 {
     expect(p, TOKEN_RETURN);
     AST* value = NULL;
@@ -728,7 +1010,27 @@ static AST* parse_return_statement(Parser* p)
     return create_return_node(value);
 }
 
-static AST* parse_statement(Parser* p)
+AST* parse_asm_statement(Parser* p)
+{
+    int is_volatile = 0;
+
+    expect(p, TOKEN_ASM);
+
+    if (check_token(p, TOKEN_VOLATILE))
+    {
+        is_volatile = 1;
+        advance_token(p);
+    }
+
+    expect(p, TOKEN_LPAREN);
+    Token asm_str = expect(p, TOKEN_STRING);
+    expect(p, TOKEN_RPAREN);
+    expect(p, TOKEN_SEMICOLON);
+
+    return create_asm_node(asm_str.word, is_volatile);
+}
+
+AST* parse_statement(Parser* p)
 {
     Token t = peek_token(p);
 
@@ -737,8 +1039,8 @@ static AST* parse_statement(Parser* p)
     if (t.type == TOKEN_WHILE) return parse_while_statement(p);
     if (t.type == TOKEN_FOR) return parse_for_statement(p);
     if (t.type == TOKEN_RETURN) return parse_return_statement(p);
+    if (t.type == TOKEN_ASM) return parse_asm_statement(p);
 
-    //  ADD THESE:
     if (t.type == TOKEN_BREAK)
     {
         advance_token(p);
@@ -757,12 +1059,17 @@ static AST* parse_statement(Parser* p)
         return node;
     }
 
-    // Local declaration
+    // Local declaration - NEW: check for typedef names
     if (t.type == TOKEN_INT || t.type == TOKEN_CHAR_KW || t.type == TOKEN_VOID ||
-        t.type == TOKEN_STRUCT || t.type == TOKEN_ENUM)
+        t.type == TOKEN_STRUCT || t.type == TOKEN_ENUM ||
+        t.type == TOKEN_STATIC || t.type == TOKEN_EXTERN ||
+        t.type == TOKEN_VOLATILE || t.type == TOKEN_CONST ||
+        t.type == TOKEN_UNSIGNED || t.type == TOKEN_SIGNED ||
+        t.type == TOKEN_LONG || t.type == TOKEN_SHORT ||
+        t.type == TOKEN_REGISTER ||
+        (t.type == TOKEN_IDENTIFIER && is_typedef_name(t.word)))  // NEW
         return parse_declaration(p);
 
-    // Expression statement
     AST* expr = parse_expression(p);
     expect(p, TOKEN_SEMICOLON);
     return expr;
@@ -770,23 +1077,19 @@ static AST* parse_statement(Parser* p)
 
 /* ====================== Top-level ====================== */
 
-
-
-static AST* parse_struct_declaration(Parser* p)
+AST* parse_struct_declaration(Parser* p)
 {
     expect(p, TOKEN_STRUCT);
     char* name = NULL;
     if (check_token(p, TOKEN_IDENTIFIER))
         name = _strdup(advance_token(p).word);
 
-    // Forward declaration: struct Name;
     if (check_token(p, TOKEN_SEMICOLON))
     {
         expect(p, TOKEN_SEMICOLON);
         return create_struct_decl_node(name, NULL, 0);
     }
 
-    // Full definition: struct Name { ... };
     expect(p, TOKEN_LBRACE);
 
     AST** members = NULL;
@@ -808,19 +1111,24 @@ static AST* parse_struct_declaration(Parser* p)
     return create_struct_decl_node(name, members, count);
 }
 
-static AST* parse_typedef(Parser* p)
+AST* parse_typedef(Parser* p)
 {
     expect(p, TOKEN_TYPEDEF);
 
     // Handle: typedef struct { ... } Alias;
     if (check_token(p, TOKEN_STRUCT))
     {
-        advance_token(p); // consume 'struct'
+        advance_token(p);
 
-        // Check if it's anonymous: typedef struct { ... } Name;
+        char* struct_name = NULL;
+
+        if (check_token(p, TOKEN_IDENTIFIER) && peek_ahead(p, 1).type == TOKEN_LBRACE)
+        {
+            struct_name = _strdup(advance_token(p).word);
+        }
+
         if (check_token(p, TOKEN_LBRACE))
         {
-            // Parse the struct body
             expect(p, TOKEN_LBRACE);
 
             AST** members = NULL;
@@ -837,28 +1145,93 @@ static AST* parse_typedef(Parser* p)
             }
 
             expect(p, TOKEN_RBRACE);
+
             Token alias = expect(p, TOKEN_IDENTIFIER);
             expect(p, TOKEN_SEMICOLON);
 
-            // Create a typedef that references the anonymous struct
-            return create_typedef_node("struct", alias.word);
+            char real_type[256];
+            if (struct_name) {
+                snprintf(real_type, sizeof(real_type), "struct %s", struct_name);
+            }
+            else {
+                snprintf(real_type, sizeof(real_type), "struct %s", alias.word);
+            }
+
+            typedef_table_add(alias.word, real_type, 0);
+
+            return create_typedef_node(real_type, alias.word);
         }
         else
         {
-            // typedef struct Name Alias;
             Token old_name = expect(p, TOKEN_IDENTIFIER);
+
+            int ptr_level = 0;
+            while (match_token(p, TOKEN_STAR)) ptr_level++;
+
             Token new_name = expect(p, TOKEN_IDENTIFIER);
             expect(p, TOKEN_SEMICOLON);
 
-            char* old = _strdup(old_name.word);
-            char* new_n = _strdup(new_name.word);
-            return create_typedef_node(old, new_n);
+            char real_type[256];
+            snprintf(real_type, sizeof(real_type), "struct %s", old_name.word);
+
+            typedef_table_add(new_name.word, real_type, ptr_level);
+
+            return create_typedef_node(real_type, new_name.word);
         }
     }
 
-    // Handle regular typedef: typedef int MyInt;
-    Token type_tok = advance_token(p);
-    char* type_str = _strdup(type_tok.word);
+    // Handle: typedef unsigned char uint8_t;
+    // typedef unsigned short uint16_t;
+    // typedef int* IntPtr;
+
+    char type_buf[256] = "";
+
+    // Keep consuming type parts until we hit * or an identifier that's followed by ;
+    while (1)
+    {
+        Token t = peek_token(p);
+        Token next = peek_ahead(p, 1);
+
+        // If this is an identifier followed by ; or *, it's the alias name
+        if (t.type == TOKEN_IDENTIFIER &&
+            (next.type == TOKEN_SEMICOLON || next.type == TOKEN_STAR))
+        {
+            break;
+        }
+
+        // These are all valid type components
+        if (t.type == TOKEN_UNSIGNED || t.type == TOKEN_SIGNED ||
+            t.type == TOKEN_CONST || t.type == TOKEN_VOLATILE ||
+            t.type == TOKEN_LONG || t.type == TOKEN_SHORT ||
+            t.type == TOKEN_INT || t.type == TOKEN_CHAR_KW ||
+            t.type == TOKEN_VOID)
+        {
+            advance_token(p);
+            if (strlen(type_buf) > 0) strcat(type_buf, " ");
+            strcat(type_buf, t.word);
+        }
+        else if (t.type == TOKEN_IDENTIFIER)
+        {
+            // Could be a type name (from previous typedef)
+            // Check if next token suggests this is still the type
+            if (next.type == TOKEN_IDENTIFIER || next.type == TOKEN_STAR)
+            {
+                // This identifier is part of the type
+                advance_token(p);
+                if (strlen(type_buf) > 0) strcat(type_buf, " ");
+                strcat(type_buf, t.word);
+            }
+            else
+            {
+                // This is the alias
+                break;
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
 
     int ptr_level = 0;
     while (match_token(p, TOKEN_STAR)) ptr_level++;
@@ -866,12 +1239,20 @@ static AST* parse_typedef(Parser* p)
     Token alias = expect(p, TOKEN_IDENTIFIER);
     expect(p, TOKEN_SEMICOLON);
 
-    return create_typedef_node(type_str, alias.word);
+    // If type_buf is empty, something went wrong
+    if (strlen(type_buf) == 0)
+    {
+        fprintf(stderr, "Parse error: empty type in typedef\n");
+        exit(1);
+    }
+
+    typedef_table_add(alias.word, type_buf, ptr_level);
+
+    return create_typedef_node(type_buf, alias.word);
 }
 
-static AST* parse_enum_declaration(Parser* p)
+AST* parse_enum_declaration(Parser* p)
 {
-    printf("DEBUG: Entering parse_enum_declaration at pos %zu, token type %d\n", p->pos, peek_token(p).type);
     expect(p, TOKEN_ENUM);
     char* name = NULL;
     if (check_token(p, TOKEN_IDENTIFIER))
@@ -885,16 +1266,14 @@ static AST* parse_enum_declaration(Parser* p)
     while (!check_token(p, TOKEN_RBRACE))
     {
         Token id = expect(p, TOKEN_IDENTIFIER);
-        AST* val = NULL;  // Don't create node yet!
+        AST* val = NULL;
 
         if (match_token(p, TOKEN_ASSIGN))
         {
-            // Create assignment node with value
             val = create_assign_node(id.word, parse_expression(p));
         }
         else
         {
-            // Just an identifier
             val = create_ident_node(id.word);
         }
 
@@ -905,14 +1284,13 @@ static AST* parse_enum_declaration(Parser* p)
         }
         values[count++] = val;
 
-        // Consume comma if present, but don't require it before RBRACE
         if (!check_token(p, TOKEN_RBRACE))
         {
             expect(p, TOKEN_COMMA);
         }
         else
         {
-            match_token(p, TOKEN_COMMA);  // Optional trailing comma
+            match_token(p, TOKEN_COMMA);
         }
     }
 
@@ -922,10 +1300,32 @@ static AST* parse_enum_declaration(Parser* p)
     return create_enum_decl_node(name, values, count);
 }
 
-static AST* parse_function(Parser* p)
+AST* parse_function(Parser* p)
 {
+    int is_static = 0;
+    int is_inline = 0;
+    int is_extern = 0;
+
+    while (1)
+    {
+        Token t = peek_token(p);
+        if (t.type == TOKEN_STATIC) { is_static = 1; advance_token(p); }
+        else if (t.type == TOKEN_INLINE) { is_inline = 1; advance_token(p); }
+        else if (t.type == TOKEN_EXTERN) { is_extern = 1; advance_token(p); }
+        else break;
+    }
+
     Token ret_tok = advance_token(p);
-    char* ret_type = _strdup(ret_tok.word);
+
+    // NEW: Resolve typedef for return type
+    char* ret_type;
+    TypedefEntry* tdef = typedef_table_lookup(ret_tok.word);
+    if (tdef) {
+        ret_type = _strdup(tdef->real_type);
+    }
+    else {
+        ret_type = _strdup(ret_tok.word);
+    }
 
     int ptr_level = 0;
     while (match_token(p, TOKEN_STAR)) ptr_level++;
@@ -942,8 +1342,20 @@ static AST* parse_function(Parser* p)
     {
         do
         {
+            while (check_token(p, TOKEN_CONST) || check_token(p, TOKEN_VOLATILE))
+                advance_token(p);
+
             Token ptok = advance_token(p);
-            char* ptype = _strdup(ptok.word);
+
+            // NEW: Resolve typedef for parameter type
+            char* ptype;
+            TypedefEntry* ptdef = typedef_table_lookup(ptok.word);
+            if (ptdef) {
+                ptype = _strdup(ptdef->real_type);
+            }
+            else {
+                ptype = _strdup(ptok.word);
+            }
 
             int pptr = 0;
             while (match_token(p, TOKEN_STAR)) pptr++;
@@ -971,17 +1383,22 @@ static AST* parse_function(Parser* p)
 
     expect(p, TOKEN_RPAREN);
 
-    // Check if it's a prototype (;) or definition ({)
     if (check_token(p, TOKEN_SEMICOLON))
     {
         expect(p, TOKEN_SEMICOLON);
-        // Function prototype - create function with NULL body
-        return create_function_node(ret_type, name, params, pcount, NULL);
+        AST* func = create_function_node(ret_type, name, params, pcount, NULL);
+        func->data.function.is_static = is_static;
+        func->data.function.is_inline = is_inline;
+        func->data.function.is_extern = is_extern;
+        return func;
     }
 
-    // Function definition with body
     AST* body = parse_block(p);
-    return create_function_node(ret_type, name, params, pcount, body);
+    AST* func = create_function_node(ret_type, name, params, pcount, body);
+    func->data.function.is_static = is_static;
+    func->data.function.is_inline = is_inline;
+    func->data.function.is_extern = is_extern;
+    return func;
 }
 
 AST* parse_program(Parser* p)
@@ -991,7 +1408,6 @@ AST* parse_program(Parser* p)
     while (peek_token(p).type != TOKEN_EOF)
     {
         Token t = peek_token(p);
-        printf("DEBUG parse_program: pos=%zu, token=%d, line=%d\n", p->pos, t.type, t.line);
 
         if (t.type == TOKEN_STRUCT)
             program_add_global(prog, parse_struct_declaration(p));
@@ -1002,8 +1418,17 @@ AST* parse_program(Parser* p)
         else
         {
             size_t saved_pos = p->pos;
+
+            while (check_token(p, TOKEN_STATIC) || check_token(p, TOKEN_INLINE) ||
+                check_token(p, TOKEN_EXTERN) || check_token(p, TOKEN_CONST) ||
+                check_token(p, TOKEN_VOLATILE))
+            {
+                advance_token(p);
+            }
+
             advance_token(p);
             while (match_token(p, TOKEN_STAR));
+
             int is_func = check_token(p, TOKEN_IDENTIFIER) && peek_ahead(p, 1).type == TOKEN_LPAREN;
             p->pos = saved_pos;
 
@@ -1110,6 +1535,9 @@ void ast_free(AST* node)
         ast_free(node->data.ternary.condition);
         ast_free(node->data.ternary.true_expr);
         ast_free(node->data.ternary.false_expr);
+        break;
+    case N_ASM:
+        free(node->data.asm_stmt.assembly_code);
         break;
     case N_PROGRAM:
         for (size_t i = 0; i < node->data.program.func_count; i++)

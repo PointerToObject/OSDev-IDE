@@ -30,6 +30,9 @@
     <ClInclude Include="Codegen\Codegen.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Tokenizer\Preprocessor\Preprocessor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Tokenizer\Scanner\Tokenizer.c">
@@ -42,6 +45,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Codegen\CodeGen\Codegen.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Tokenizer\Preprocessor\src\Preprocessor.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

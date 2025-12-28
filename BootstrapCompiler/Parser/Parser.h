@@ -40,7 +40,8 @@ typedef enum
 	N_SIZEOF,
 	N_STRING_LIT,
 	N_CHAR_LIT,
-	N_TERNARY
+	N_TERNARY,
+	N_ASM  // NEW: Inline assembly
 } Nodes;
 
 typedef struct
@@ -50,6 +51,10 @@ typedef struct
 	AST** params;
 	size_t param_count;
 	AST* body;
+	// NEW: Function qualifiers
+	int is_static;
+	int is_inline;
+	int is_extern;
 } FunctionNode;
 
 typedef struct
@@ -110,6 +115,15 @@ typedef struct
 	int pointer_level;
 	AST* init_value;
 	AST* array_size;
+	// NEW: Storage class and type qualifiers
+	int is_static;
+	int is_extern;
+	int is_inline;
+	int is_volatile;
+	int is_const;
+	int is_unsigned;
+	int is_register;
+	int is_packed;
 } DeclNode;
 
 typedef struct
@@ -191,6 +205,13 @@ typedef struct
 	AST* false_expr;
 } TernaryNode;
 
+// NEW: Inline assembly node
+typedef struct
+{
+	char* assembly_code;
+	int is_volatile;
+} AsmNode;
+
 typedef struct
 {
 	AST** functions;
@@ -230,6 +251,7 @@ typedef struct AST
 		CastNode cast;
 		SizeofNode sizeof_expr;
 		TernaryNode ternary;
+		AsmNode asm_stmt;  // NEW
 	} data;
 } AST;
 
@@ -266,6 +288,7 @@ AST* create_cast_node(char* type, AST* expr);
 AST* create_sizeof_node(AST* expr);
 AST* create_ternary_node(AST* condition, AST* true_expr, AST* false_expr);
 AST* create_program_node();
+AST* create_asm_node(char* code, int is_volatile);  // NEW
 
 void block_add_statement(AST* block, AST* stmt);
 void program_add_function(AST* program, AST* func);
@@ -298,6 +321,7 @@ AST* parse_typedef(Parser* p);
 AST* parse_enum_declaration(Parser* p);
 AST* parse_function(Parser* p);
 AST* parse_program(Parser* p);
+AST* parse_asm_statement(Parser* p);  // NEW
 
 void ast_free(AST* node);
 

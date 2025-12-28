@@ -28,6 +28,20 @@ typedef enum
 	TOKEN_BREAK,
 	TOKEN_CONTINUE,
 
+	// NEW: Kernel/Driver Keywords
+	TOKEN_INLINE,
+	TOKEN_STATIC,
+	TOKEN_EXTERN,
+	TOKEN_VOLATILE,
+	TOKEN_CONST,
+	TOKEN_UNSIGNED,
+	TOKEN_SIGNED,
+	TOKEN_LONG,
+	TOKEN_SHORT,
+	TOKEN_REGISTER,
+	TOKEN_ASM,
+	TOKEN_PACKED,
+
 	// Operators
 	TOKEN_PLUS,
 	TOKEN_MINUS,
@@ -114,5 +128,4 @@ Token* scan_string(Scanner* s);
 Token* scan_char(Scanner* s);
 Tokens check_keyword(const char* word);
 
-
-#endif
+#endif // TOKENIZER_H
