@@ -23,3 +23,4 @@ C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\IDE\obj\Release\net8.
 C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\IDE\obj\Release\net8.0-windows\IDE.pdb
 C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\IDE\obj\Release\net8.0-windows\IDE.genruntimeconfig.cache
 C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\IDE\obj\Release\net8.0-windows\ref\IDE.dll
+C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\IDE\bin\Release\net8.0-windows\Microsoft.Xaml.Behaviors.dll
