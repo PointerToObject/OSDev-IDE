@@ -4,15 +4,17 @@
 
 #define MAX_LOCALS 256
 #define MAX_GLOBALS 256
+#define MAX_LOOP_DEPTH 32
 
 typedef struct {
     char* name;
     int offset;
     int size;
     int is_param;
-    char* type_name;
+    char* type_name;      // Full type including "struct Foo"
     int pointer_level;
     int element_size;
+    int is_array;         // NEW: Track if this is an array
 } Local;
 
 typedef struct {
@@ -35,136 +37,190 @@ typedef struct {
     int count;
 } GlobalTable;
 
+/* ====================== Loop Label Stack (for break/continue) ====================== */
+
+typedef struct {
+    int break_label;
+    int continue_label;
+} LoopContext;
+
+static LoopContext loop_stack[MAX_LOOP_DEPTH];
+static int loop_depth = 0;
+
+static void push_loop(int break_lbl, int continue_lbl) {
+    if (loop_depth >= MAX_LOOP_DEPTH) {
+        fprintf(stderr, "Loop nesting too deep\n");
+        return;
+    }
+    loop_stack[loop_depth].break_label = break_lbl;
+    loop_stack[loop_depth].continue_label = continue_lbl;
+    loop_depth++;
+}
+
+static void pop_loop(void) {
+    if (loop_depth > 0) loop_depth--;
+}
+
+static int get_break_label(void) {
+    if (loop_depth == 0) return -1;
+    return loop_stack[loop_depth - 1].break_label;
+}
+
+static int get_continue_label(void) {
+    if (loop_depth == 0) return -1;
+    return loop_stack[loop_depth - 1].continue_label;
+}
+
 /* ====================== Type Size Helpers ====================== */
 
 static int get_base_type_size(const char* type_name) {
     if (!type_name) return 4;
-    const char* base = type_name;
-    if (strncmp(type_name, "unsigned ", 9) == 0) base = type_name + 9;
-    else if (strncmp(type_name, "signed ", 7) == 0) base = type_name + 7;
 
-    if (strcmp(base, "char") == 0) return 1;
-    if (strcmp(base, "short") == 0) return 2;
-    if (strcmp(base, "int") == 0) return 4;
-    if (strcmp(base, "long") == 0) return 4;
+    // Make a copy we can modify
+    char base[64];
+    strncpy(base, type_name, 63);
+    base[63] = '\0';
+
+    // Skip qualifiers
+    char* p = base;
+    if (strncmp(p, "unsigned ", 9) == 0) p += 9;
+    else if (strncmp(p, "signed ", 7) == 0) p += 7;
+    else if (strncmp(p, "const ", 6) == 0) p += 6;
+    else if (strncmp(p, "volatile ", 9) == 0) p += 9;
+
+    // Strip pointer asterisks and spaces from end
+    size_t len = strlen(p);
+    while (len > 0 && (p[len - 1] == '*' || p[len - 1] == ' ')) {
+        p[--len] = '\0';
+    }
+
+    if (strcmp(p, "char") == 0) return 1;
+    if (strcmp(p, "short") == 0) return 2;
+    if (strcmp(p, "int") == 0) return 4;
+    if (strcmp(p, "long") == 0) return 4;
+    if (strcmp(p, "void") == 0) return 1;  // void* arithmetic uses 1
+
+    // Struct types - will be resolved later
+    if (strncmp(p, "struct ", 7) == 0) return 4;  // Default, fixed by struct lookup
+
     return 4;
 }
 
 static int calc_element_size(const char* type_name, int pointer_level) {
-    if (pointer_level > 1) return 4;
+    if (pointer_level > 1) return 4;  // Pointer to pointer = 4 bytes
     if (pointer_level == 1) return get_base_type_size(type_name);
     return get_base_type_size(type_name);
 }
 
 /* ====================== Symbol Table Functions ====================== */
 
-void symtab_init(SymbolTable* st) {
+static void symtab_init(SymbolTable* st) {
     st->count = 0;
     st->stack_offset = 0;
 }
 
-int symtab_add(SymbolTable* st, const char* name) {
+// Forward declaration - need access to CodeGen for struct lookup
+static CodeGen* g_current_cg = NULL;
+
+static int symtab_add_typed(SymbolTable* st, const char* name, const char* type_name,
+    int pointer_level, int is_array, int array_count) {
     if (st->count >= MAX_LOCALS) {
         fprintf(stderr, "Too many local variables\n");
         exit(1);
     }
-    st->stack_offset += 4;
-    st->locals[st->count].name = _strdup(name);
-    st->locals[st->count].offset = st->stack_offset;
-    st->locals[st->count].size = 4;
-    st->locals[st->count].is_param = 0;
-    st->locals[st->count].type_name = _strdup("int");
-    st->locals[st->count].pointer_level = 0;
-    st->locals[st->count].element_size = 4;
-    st->count++;
-    return st->stack_offset;
-}
 
-int symtab_add_typed(SymbolTable* st, const char* name, const char* type_name, int pointer_level) {
-    if (st->count >= MAX_LOCALS) {
-        fprintf(stderr, "Too many local variables\n");
-        exit(1);
+    int elem_size;
+    int total_size;
+
+    // Check if this is a struct type
+    if (pointer_level == 0 && strncmp(type_name, "struct ", 7) == 0) {
+        // Look up struct size
+        StructInfo* sinfo = NULL;
+        if (g_current_cg) {
+            sinfo = codegen_find_struct(g_current_cg, type_name + 7);
+        }
+        if (sinfo) {
+            elem_size = sinfo->total_size;
+        }
+        else {
+            elem_size = 4;  // Fallback
+            fprintf(stderr, "Warning: Unknown struct '%s', using size 4\n", type_name);
+        }
     }
-    st->stack_offset += 4;
-    st->locals[st->count].name = _strdup(name);
-    st->locals[st->count].offset = st->stack_offset;
-    st->locals[st->count].size = 4;
-    st->locals[st->count].is_param = 0;
-    st->locals[st->count].type_name = _strdup(type_name);
-    st->locals[st->count].pointer_level = pointer_level;
-    st->locals[st->count].element_size = calc_element_size(type_name, pointer_level);
-    st->count++;
-    return st->stack_offset;
-}
-
-int symtab_add_array(SymbolTable* st, const char* name, int array_size) {
-    if (st->count >= MAX_LOCALS) {
-        fprintf(stderr, "Too many local variables\n");
-        exit(1);
+    else {
+        elem_size = get_base_type_size(type_name);
     }
-    int bytes = array_size > 0 ? array_size : 4;
-    st->stack_offset += bytes;
-    st->locals[st->count].name = _strdup(name);
-    st->locals[st->count].offset = st->stack_offset;
-    st->locals[st->count].size = bytes;
-    st->locals[st->count].is_param = 0;
-    st->locals[st->count].type_name = _strdup("char");
-    st->locals[st->count].pointer_level = 0;
-    st->locals[st->count].element_size = 1;
-    st->count++;
-    return st->stack_offset;
-}
 
-int symtab_add_array_typed(SymbolTable* st, const char* name, int array_size, const char* type_name, int pointer_level) {
-    if (st->count >= MAX_LOCALS) {
-        fprintf(stderr, "Too many local variables\n");
-        exit(1);
+    if (pointer_level > 0) {
+        // Pointers are always 4 bytes
+        total_size = 4;
     }
-    int elem_size = get_base_type_size(type_name);
-    int bytes = array_size > 0 ? array_size * elem_size : 4;
-    st->stack_offset += bytes;
-    st->locals[st->count].name = _strdup(name);
-    st->locals[st->count].offset = st->stack_offset;
-    st->locals[st->count].size = bytes;
-    st->locals[st->count].is_param = 0;
-    st->locals[st->count].type_name = _strdup(type_name);
-    st->locals[st->count].pointer_level = pointer_level;
-    st->locals[st->count].element_size = elem_size;
+    else if (is_array && array_count > 0) {
+        total_size = elem_size * array_count;
+    }
+    else {
+        total_size = elem_size;
+    }
+
+    // Align to 4 bytes
+    total_size = (total_size + 3) & ~3;
+
+    st->stack_offset += total_size;
+
+    Local* local = &st->locals[st->count];
+    local->name = _strdup(name);
+    local->offset = st->stack_offset;
+    local->size = total_size;
+    local->is_param = 0;
+    local->type_name = _strdup(type_name);
+    local->pointer_level = pointer_level;
+    // For pointers: element_size is size of what we point TO
+    // char* -> element_size = 1, int* -> element_size = 4, char** -> element_size = 4
+    if (pointer_level > 1) {
+        local->element_size = 4;  // Pointer to pointer = 4 bytes
+    }
+    else if (pointer_level == 1) {
+        local->element_size = get_base_type_size(type_name);  // Size of pointed-to type
+    }
+    else {
+        local->element_size = elem_size;
+    }
+    local->is_array = is_array;
+
     st->count++;
     return st->stack_offset;
 }
 
-void symtab_add_param(SymbolTable* st, const char* name, int stack_pos) {
+static void symtab_add_param_typed(SymbolTable* st, const char* name, int stack_pos,
+    const char* type_name, int pointer_level) {
     if (st->count >= MAX_LOCALS) {
         fprintf(stderr, "Too many parameters\n");
         exit(1);
     }
-    st->locals[st->count].name = _strdup(name);
-    st->locals[st->count].offset = stack_pos;
-    st->locals[st->count].size = 4;
-    st->locals[st->count].is_param = 1;
-    st->locals[st->count].type_name = _strdup("int");
-    st->locals[st->count].pointer_level = 0;
-    st->locals[st->count].element_size = 4;
-    st->count++;
-}
 
-void symtab_add_param_typed(SymbolTable* st, const char* name, int stack_pos, const char* type_name, int pointer_level) {
-    if (st->count >= MAX_LOCALS) {
-        fprintf(stderr, "Too many parameters\n");
-        exit(1);
+    Local* local = &st->locals[st->count];
+    local->name = _strdup(name);
+    local->offset = stack_pos;
+    local->size = 4;
+    local->is_param = 1;
+    local->type_name = _strdup(type_name);
+    local->pointer_level = pointer_level;
+    // For pointers: element_size is size of what we point TO
+    if (pointer_level > 1) {
+        local->element_size = 4;  // Pointer to pointer
     }
-    st->locals[st->count].name = _strdup(name);
-    st->locals[st->count].offset = stack_pos;
-    st->locals[st->count].size = 4;
-    st->locals[st->count].is_param = 1;
-    st->locals[st->count].type_name = _strdup(type_name);
-    st->locals[st->count].pointer_level = pointer_level;
-    st->locals[st->count].element_size = calc_element_size(type_name, pointer_level);
+    else if (pointer_level == 1) {
+        local->element_size = get_base_type_size(type_name);
+    }
+    else {
+        local->element_size = get_base_type_size(type_name);
+    }
+    local->is_array = 0;
+
     st->count++;
 }
 
-Local* symtab_lookup_entry(SymbolTable* st, const char* name) {
+static Local* symtab_lookup_entry(SymbolTable* st, const char* name) {
     for (int i = 0; i < st->count; i++) {
         if (strcmp(st->locals[i].name, name) == 0) {
             return &st->locals[i];
@@ -173,13 +229,7 @@ Local* symtab_lookup_entry(SymbolTable* st, const char* name) {
     return NULL;
 }
 
-int symtab_lookup(SymbolTable* st, const char* name) {
-    Local* entry = symtab_lookup_entry(st, name);
-    if (entry) return entry->offset;
-    return -1;
-}
-
-void symtab_free(SymbolTable* st) {
+static void symtab_free(SymbolTable* st) {
     for (int i = 0; i < st->count; i++) {
         free(st->locals[i].name);
         if (st->locals[i].type_name) free(st->locals[i].type_name);
@@ -190,39 +240,27 @@ void symtab_free(SymbolTable* st) {
 
 /* ====================== Global Table Functions ====================== */
 
-void globtab_init(GlobalTable* gt) {
+static void globtab_init(GlobalTable* gt) {
     gt->count = 0;
 }
 
-void globtab_add(GlobalTable* gt, const char* name, const char* type_name, int pointer_level) {
+static void globtab_add(GlobalTable* gt, const char* name, const char* type_name,
+    int pointer_level, int is_array, int array_size) {
     if (gt->count >= MAX_GLOBALS) {
         fprintf(stderr, "Too many globals\n");
         exit(1);
     }
-    gt->globals[gt->count].name = _strdup(name);
-    gt->globals[gt->count].type_name = _strdup(type_name);
-    gt->globals[gt->count].pointer_level = pointer_level;
-    gt->globals[gt->count].element_size = calc_element_size(type_name, pointer_level);
-    gt->globals[gt->count].is_array = 0;
-    gt->globals[gt->count].array_size = 0;
+    GlobalVar* gv = &gt->globals[gt->count];
+    gv->name = _strdup(name);
+    gv->type_name = _strdup(type_name);
+    gv->pointer_level = pointer_level;
+    gv->element_size = get_base_type_size(type_name);
+    gv->is_array = is_array;
+    gv->array_size = array_size;
     gt->count++;
 }
 
-void globtab_add_array(GlobalTable* gt, const char* name, const char* type_name, int pointer_level, int array_size) {
-    if (gt->count >= MAX_GLOBALS) {
-        fprintf(stderr, "Too many globals\n");
-        exit(1);
-    }
-    gt->globals[gt->count].name = _strdup(name);
-    gt->globals[gt->count].type_name = _strdup(type_name);
-    gt->globals[gt->count].pointer_level = pointer_level;
-    gt->globals[gt->count].element_size = get_base_type_size(type_name);
-    gt->globals[gt->count].is_array = 1;
-    gt->globals[gt->count].array_size = array_size;
-    gt->count++;
-}
-
-GlobalVar* globtab_lookup(GlobalTable* gt, const char* name) {
+static GlobalVar* globtab_lookup(GlobalTable* gt, const char* name) {
     for (int i = 0; i < gt->count; i++) {
         if (strcmp(gt->globals[i].name, name) == 0) {
             return &gt->globals[i];
@@ -231,7 +269,7 @@ GlobalVar* globtab_lookup(GlobalTable* gt, const char* name) {
     return NULL;
 }
 
-void globtab_free(GlobalTable* gt) {
+static void globtab_free(GlobalTable* gt) {
     for (int i = 0; i < gt->count; i++) {
         free(gt->globals[i].name);
         free(gt->globals[i].type_name);
@@ -246,7 +284,7 @@ typedef struct {
     char* value;
 } StringLiteral;
 
-/* ====================== CodeGen Setup ====================== */
+/* ====================== CodeGen Structure ====================== */
 
 struct CodeGen {
     FILE* output;
@@ -267,15 +305,13 @@ struct CodeGen {
 
 /* ====================== Struct Management ====================== */
 
-void codegen_init_struct_table(CodeGen* cg)
-{
+void codegen_init_struct_table(CodeGen* cg) {
     cg->struct_capacity = 32;
     cg->structs = (StructInfo*)malloc(sizeof(StructInfo) * cg->struct_capacity);
     cg->struct_count = 0;
 }
 
-void codegen_register_struct(CodeGen* cg, AST* struct_decl)
-{
+void codegen_register_struct(CodeGen* cg, AST* struct_decl) {
     if (!struct_decl || struct_decl->type != N_STRUCT_DECL) return;
     if (!struct_decl->data.struct_decl.name) return;
 
@@ -297,21 +333,35 @@ void codegen_register_struct(CodeGen* cg, AST* struct_decl)
             info->members[i].name = _strdup(member->data.decl.name);
             info->members[i].offset = offset;
 
-            int size = 4;
-            if (member->data.decl.array_size) {
+            int size;
+            if (member->data.decl.pointer_level > 0) {
+                size = 4;  // All pointers are 4 bytes
+            }
+            else if (member->data.decl.array_size) {
                 if (member->data.decl.array_size->type == N_INTLIT) {
-                    size = member->data.decl.array_size->data.int_lit.value;
+                    int arr_count = member->data.decl.array_size->data.int_lit.value;
+                    int elem_size = get_base_type_size(member->data.decl.type);
+                    size = arr_count * elem_size;
+                }
+                else {
+                    size = 4;
                 }
             }
+            else {
+                size = get_base_type_size(member->data.decl.type);
+            }
+
             info->members[i].size = size;
             offset += size;
+
+            // Align to 4 bytes for next member
+            offset = (offset + 3) & ~3;
         }
     }
     info->total_size = offset;
 }
 
-StructInfo* codegen_find_struct(CodeGen* cg, const char* name)
-{
+StructInfo* codegen_find_struct(CodeGen* cg, const char* name) {
     const char* search_name = name;
     if (strncmp(name, "struct ", 7) == 0) {
         search_name = name + 7;
@@ -325,8 +375,7 @@ StructInfo* codegen_find_struct(CodeGen* cg, const char* name)
     return NULL;
 }
 
-int codegen_get_member_offset(CodeGen* cg, const char* struct_name, const char* member_name)
-{
+int codegen_get_member_offset(CodeGen* cg, const char* struct_name, const char* member_name) {
     StructInfo* info = codegen_find_struct(cg, struct_name);
     if (!info) return -1;
 
@@ -338,8 +387,19 @@ int codegen_get_member_offset(CodeGen* cg, const char* struct_name, const char* 
     return -1;
 }
 
-void codegen_free_struct_table(CodeGen* cg)
-{
+static int codegen_get_member_size(CodeGen* cg, const char* struct_name, const char* member_name) {
+    StructInfo* info = codegen_find_struct(cg, struct_name);
+    if (!info) return 4;
+
+    for (int i = 0; i < info->member_count; i++) {
+        if (strcmp(info->members[i].name, member_name) == 0) {
+            return info->members[i].size;
+        }
+    }
+    return 4;
+}
+
+void codegen_free_struct_table(CodeGen* cg) {
     for (int i = 0; i < cg->struct_count; i++) {
         free(cg->structs[i].name);
         for (int j = 0; j < cg->structs[i].member_count; j++) {
@@ -352,8 +412,7 @@ void codegen_free_struct_table(CodeGen* cg)
 
 /* ====================== CodeGen Create/Free ====================== */
 
-CodeGen* codegen_create(const char* output_file, TargetPlatform target)
-{
+CodeGen* codegen_create(const char* output_file, TargetPlatform target) {
     CodeGen* cg = (CodeGen*)malloc(sizeof(CodeGen));
     cg->output = fopen(output_file, "w");
     if (!cg->output) {
@@ -371,12 +430,12 @@ CodeGen* codegen_create(const char* output_file, TargetPlatform target)
     cg->string_list_count = 0;
 
     codegen_init_struct_table(cg);
+    loop_depth = 0;  // Reset loop stack
 
     return cg;
 }
 
-void codegen_free(CodeGen* cg)
-{
+void codegen_free(CodeGen* cg) {
     if (cg->output) fclose(cg->output);
     symtab_free(&cg->symtab);
     globtab_free(&cg->globtab);
@@ -384,19 +443,15 @@ void codegen_free(CodeGen* cg)
         free(cg->strings[i].value);
     }
     free(cg->strings);
-
     codegen_free_struct_table(cg);
-
     free(cg);
 }
 
-int codegen_new_label(CodeGen* cg)
-{
+int codegen_new_label(CodeGen* cg) {
     return cg->label_count++;
 }
 
-void emit(CodeGen* cg, const char* fmt, ...)
-{
+void emit(CodeGen* cg, const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     vfprintf(cg->output, fmt, args);
@@ -404,8 +459,7 @@ void emit(CodeGen* cg, const char* fmt, ...)
     fprintf(cg->output, "\n");
 }
 
-int codegen_add_string(CodeGen* cg, const char* value)
-{
+int codegen_add_string(CodeGen* cg, const char* value) {
     if (cg->string_list_count >= cg->string_capacity) {
         cg->string_capacity *= 2;
         cg->strings = (StringLiteral*)realloc(cg->strings,
@@ -418,19 +472,37 @@ int codegen_add_string(CodeGen* cg, const char* value)
     return id;
 }
 
-void codegen_emit_strings(CodeGen* cg)
-{
+void codegen_emit_strings(CodeGen* cg) {
     if (cg->string_list_count > 0) {
         for (int i = 0; i < cg->string_list_count; i++) {
-            emit(cg, "str%d db `%s`,0",
-                cg->strings[i].id,
-                cg->strings[i].value);
+            // Escape backticks and other special chars for NASM
+            emit(cg, "str%d db `%s`,0", cg->strings[i].id, cg->strings[i].value);
         }
     }
 }
 
-/* ====================== Get element size for variable ====================== */
+/* ====================== Type Resolution Helpers ====================== */
 
+// Get the struct type name for a variable (returns NULL if not a struct)
+static const char* get_var_struct_type(CodeGen* cg, const char* var_name) {
+    Local* local = symtab_lookup_entry(&cg->symtab, var_name);
+    if (local && local->type_name) {
+        if (strncmp(local->type_name, "struct ", 7) == 0) {
+            return local->type_name + 7;  // Return just the struct name
+        }
+    }
+
+    GlobalVar* global = globtab_lookup(&cg->globtab, var_name);
+    if (global && global->type_name) {
+        if (strncmp(global->type_name, "struct ", 7) == 0) {
+            return global->type_name + 7;
+        }
+    }
+
+    return NULL;
+}
+
+// Get element size for array/pointer variable
 static int get_element_size_for_var(CodeGen* cg, const char* var_name) {
     Local* local = symtab_lookup_entry(&cg->symtab, var_name);
     if (local) return local->element_size;
@@ -438,17 +510,20 @@ static int get_element_size_for_var(CodeGen* cg, const char* var_name) {
     GlobalVar* global = globtab_lookup(&cg->globtab, var_name);
     if (global) return global->element_size;
 
-    return 1;
+    return 1;  // Default to byte access
 }
 
 /* ====================== Emit helpers for sized operations ====================== */
 
 static void emit_scale_index(CodeGen* cg, int element_size) {
-    if (element_size == 2) {
-        emit(cg, "    shl eax, 1        ; Scale index by 2 (short)");
+    if (element_size == 1) {
+        // No scaling needed
+    }
+    else if (element_size == 2) {
+        emit(cg, "    shl eax, 1        ; Scale index by 2");
     }
     else if (element_size == 4) {
-        emit(cg, "    shl eax, 2        ; Scale index by 4 (int)");
+        emit(cg, "    shl eax, 2        ; Scale index by 4");
     }
     else if (element_size > 4) {
         emit(cg, "    imul eax, %d      ; Scale index by %d", element_size, element_size);
@@ -481,23 +556,23 @@ static void emit_store_sized(CodeGen* cg, int element_size, const char* dest_reg
 
 /* ====================== Bare Metal x86-32 Prologue ====================== */
 
-void codegen_baremetal_prologue(CodeGen* cg)
-{
+static void codegen_baremetal_prologue(CodeGen* cg) {
     emit(cg, "[BITS 32]");
     emit(cg, "");
     emit(cg, "[org 0x1000]");
     emit(cg, "");
     emit(cg, "section .text");
+    emit(cg, "global _start");
     emit(cg, "global kernel_main");
     emit(cg, "");
+    emit(cg, "_start:");
     emit(cg, "    jmp kernel_main");
     emit(cg, "");
 }
 
-/* ====================== Kernel Runtime Functions ====================== */
+/* ====================== Runtime Functions ====================== */
 
-static void codegen_emit_port_io_runtime(CodeGen* cg)
-{
+static void codegen_emit_port_io_runtime(CodeGen* cg) {
     emit(cg, "; ========== Port I/O Functions ==========");
     emit(cg, "");
 
@@ -561,8 +636,7 @@ static void codegen_emit_port_io_runtime(CodeGen* cg)
     emit(cg, "");
 }
 
-static void codegen_emit_interrupt_runtime(CodeGen* cg)
-{
+static void codegen_emit_interrupt_runtime(CodeGen* cg) {
     emit(cg, "; ========== Interrupt Control ==========");
     emit(cg, "");
 
@@ -612,8 +686,7 @@ static void codegen_emit_interrupt_runtime(CodeGen* cg)
     emit(cg, "");
 }
 
-static void codegen_emit_memory_runtime(CodeGen* cg)
-{
+static void codegen_emit_memory_runtime(CodeGen* cg) {
     emit(cg, "; ========== Memory Operations ==========");
     emit(cg, "");
 
@@ -650,199 +723,189 @@ static void codegen_emit_memory_runtime(CodeGen* cg)
     emit(cg, "    pop ebp");
     emit(cg, "    ret");
     emit(cg, "");
-}
 
-static void codegen_emit_runtime(CodeGen* cg)
-{
-    emit(cg, "print_string:");
-    emit(cg, "    pusha");
-    emit(cg, "    mov esi, [esp+32]");
-    emit(cg, "    mov edi, 0xB8000");
-    emit(cg, "    mov ax,0x10");
-    emit(cg, ".print_loop:");
-    emit(cg, "    lodsb");
-    emit(cg, "    test al,al");
-    emit(cg, "    jz .done");
-    emit(cg, "    mov ah,0x0F");
-    emit(cg, "    stosw");
-    emit(cg, "    jmp .print_loop");
-    emit(cg, ".done:");
-    emit(cg, "    popa");
+    emit(cg, "memcmp:");
+    emit(cg, "    push ebp");
+    emit(cg, "    mov ebp, esp");
+    emit(cg, "    push esi");
+    emit(cg, "    push edi");
+    emit(cg, "    push ecx");
+    emit(cg, "    mov esi, [ebp+8]   ; s1");
+    emit(cg, "    mov edi, [ebp+12]  ; s2");
+    emit(cg, "    mov ecx, [ebp+16]  ; n");
+    emit(cg, "    xor eax, eax");
+    emit(cg, "    repe cmpsb");
+    emit(cg, "    je .memcmp_equal");
+    emit(cg, "    movzx eax, byte [esi-1]");
+    emit(cg, "    movzx edx, byte [edi-1]");
+    emit(cg, "    sub eax, edx");
+    emit(cg, ".memcmp_equal:");
+    emit(cg, "    pop ecx");
+    emit(cg, "    pop edi");
+    emit(cg, "    pop esi");
+    emit(cg, "    pop ebp");
     emit(cg, "    ret");
     emit(cg, "");
+}
 
-    emit(cg, "print_fmt:");
+static void codegen_emit_runtime(CodeGen* cg) {
+    // VGA text mode printing
+    emit(cg, "; ========== VGA Text Mode ==========");
+    emit(cg, "");
+
+    emit(cg, "print_char:");
     emit(cg, "    push ebp");
     emit(cg, "    mov ebp, esp");
     emit(cg, "    push ebx");
+    emit(cg, "    mov eax, [vga_cursor]");
+    emit(cg, "    mov ebx, 0xB8000");
+    emit(cg, "    mov cl, [ebp+8]      ; char");
+    emit(cg, "    mov ch, 0x0F         ; white on black");
+    emit(cg, "    mov [ebx + eax*2], cx");
+    emit(cg, "    inc dword [vga_cursor]");
+    emit(cg, "    pop ebx");
+    emit(cg, "    pop ebp");
+    emit(cg, "    ret");
+    emit(cg, "");
+
+    emit(cg, "print_string:");
+    emit(cg, "    push ebp");
+    emit(cg, "    mov ebp, esp");
     emit(cg, "    push esi");
-    emit(cg, "    push edi");
-    emit(cg, "    mov esi, [ebp+8]");
-    emit(cg, "    mov edi, 0xB8000");
-    emit(cg, "    lea ebx, [ebp+12]");
-    emit(cg, ".loop:");
+    emit(cg, "    push ebx");
+    emit(cg, "    mov esi, [ebp+8]     ; string ptr");
+    emit(cg, "    mov ebx, 0xB8000");
+    emit(cg, ".ps_loop:");
     emit(cg, "    lodsb");
     emit(cg, "    test al, al");
-    emit(cg, "    jz .done");
-    emit(cg, "    cmp al, 10");
-    emit(cg, "    je .loop");
-    emit(cg, "    cmp al, '%%'");
-    emit(cg, "    jne .print");
-    emit(cg, "    lodsb");
-    emit(cg, "    cmp al, 'c'");
-    emit(cg, "    je .char");
-    emit(cg, "    cmp al, 'd'");
-    emit(cg, "    je .decimal");
-    emit(cg, "    cmp al, 'x'");
-    emit(cg, "    je .hex");
-    emit(cg, "    cmp al, 'f'");
-    emit(cg, "    je .float");
-    emit(cg, "    mov al, '?'");
-    emit(cg, ".print:");
+    emit(cg, "    jz .ps_done");
+    emit(cg, "    mov edi, [vga_cursor]");
     emit(cg, "    mov ah, 0x0F");
-    emit(cg, "    stosw");
-    emit(cg, "    jmp .loop");
-    emit(cg, ".char:");
-    emit(cg, "    mov al, [ebx]");
-    emit(cg, "    mov ah, 0x0F");
-    emit(cg, "    stosw");
-    emit(cg, "    add ebx, 4");
-    emit(cg, "    jmp .loop");
-    emit(cg, ".decimal:");
-    emit(cg, "    mov eax, [ebx]");
-    emit(cg, "    call print_int");
-    emit(cg, "    add ebx, 4");
-    emit(cg, "    jmp .loop");
-    emit(cg, ".hex:");
-    emit(cg, "    mov eax, [ebx]");
-    emit(cg, "    call print_hex8");
-    emit(cg, "    add ebx, 4");
-    emit(cg, "    jmp .loop");
-    emit(cg, ".float:");
-    emit(cg, "    fld dword [ebx]");
-    emit(cg, "    call print_float");
-    emit(cg, "    add ebx, 4");
-    emit(cg, "    jmp .loop");
-    emit(cg, ".done:");
-    emit(cg, "    pop edi");
+    emit(cg, "    mov [ebx + edi*2], ax");
+    emit(cg, "    inc dword [vga_cursor]");
+    emit(cg, "    jmp .ps_loop");
+    emit(cg, ".ps_done:");
+    emit(cg, "    pop ebx");
     emit(cg, "    pop esi");
+    emit(cg, "    pop ebp");
+    emit(cg, "    ret");
+    emit(cg, "");
+
+    emit(cg, "print_hex:");
+    emit(cg, "    push ebp");
+    emit(cg, "    mov ebp, esp");
+    emit(cg, "    push ebx");
+    emit(cg, "    push ecx");
+    emit(cg, "    push edx");
+    emit(cg, "    mov eax, [ebp+8]");
+    emit(cg, "    mov ecx, 8");
+    emit(cg, "    mov ebx, 0xB8000");
+    emit(cg, ".ph_loop:");
+    emit(cg, "    rol eax, 4");
+    emit(cg, "    mov edx, eax");
+    emit(cg, "    and edx, 0xF");
+    emit(cg, "    mov dl, [hex_chars + edx]");
+    emit(cg, "    push eax");
+    emit(cg, "    mov edi, [vga_cursor]");
+    emit(cg, "    mov dh, 0x0F");
+    emit(cg, "    mov [ebx + edi*2], dx");
+    emit(cg, "    inc dword [vga_cursor]");
+    emit(cg, "    pop eax");
+    emit(cg, "    loop .ph_loop");
+    emit(cg, "    pop edx");
+    emit(cg, "    pop ecx");
     emit(cg, "    pop ebx");
     emit(cg, "    pop ebp");
     emit(cg, "    ret");
     emit(cg, "");
 
     emit(cg, "print_int:");
+    emit(cg, "    push ebp");
+    emit(cg, "    mov ebp, esp");
     emit(cg, "    push ebx");
     emit(cg, "    push ecx");
     emit(cg, "    push edx");
+    emit(cg, "    push esi");
+    emit(cg, "    mov eax, [ebp+8]");
+    emit(cg, "    mov esi, 0xB8000");
+    emit(cg, "    test eax, eax");
+    emit(cg, "    jns .pi_positive");
+    emit(cg, "    ; Print minus sign");
+    emit(cg, "    push eax");
+    emit(cg, "    mov edi, [vga_cursor]");
+    emit(cg, "    mov word [esi + edi*2], 0x0F2D");
+    emit(cg, "    inc dword [vga_cursor]");
+    emit(cg, "    pop eax");
+    emit(cg, "    neg eax");
+    emit(cg, ".pi_positive:");
     emit(cg, "    mov ebx, 10");
     emit(cg, "    xor ecx, ecx");
     emit(cg, "    test eax, eax");
-    emit(cg, "    jnz .div");
-    emit(cg, "    push eax");
+    emit(cg, "    jnz .pi_div");
+    emit(cg, "    push 0");
     emit(cg, "    inc ecx");
-    emit(cg, "    jmp .print");
-    emit(cg, ".div:");
+    emit(cg, "    jmp .pi_print");
+    emit(cg, ".pi_div:");
     emit(cg, "    xor edx, edx");
     emit(cg, "    div ebx");
     emit(cg, "    push edx");
     emit(cg, "    inc ecx");
     emit(cg, "    test eax, eax");
-    emit(cg, "    jnz .div");
-    emit(cg, ".print:");
+    emit(cg, "    jnz .pi_div");
+    emit(cg, ".pi_print:");
     emit(cg, "    pop eax");
     emit(cg, "    add al, '0'");
     emit(cg, "    mov ah, 0x0F");
-    emit(cg, "    stosw");
-    emit(cg, "    loop .print");
-    emit(cg, "    pop edx");
-    emit(cg, "    pop ecx");
-    emit(cg, "    pop ebx");
-    emit(cg, "    ret");
-    emit(cg, "");
-
-    emit(cg, "print_hex8:");
-    emit(cg, "    push ebx");
-    emit(cg, "    push ecx");
-    emit(cg, "    push edx");
-    emit(cg, "    mov ecx, 8");
-    emit(cg, ".hloop:");
-    emit(cg, "    rol eax, 4");
-    emit(cg, "    mov ebx, eax");
-    emit(cg, "    and ebx, 0xF");
-    emit(cg, "    mov dl, [hex_chars + ebx]");
-    emit(cg, "    push eax");
-    emit(cg, "    mov al, dl");
-    emit(cg, "    mov ah, 0x0F");
-    emit(cg, "    stosw");
-    emit(cg, "    pop eax");
-    emit(cg, "    loop .hloop");
-    emit(cg, "    pop edx");
-    emit(cg, "    pop ecx");
-    emit(cg, "    pop ebx");
-    emit(cg, "    ret");
-    emit(cg, "");
-
-    emit(cg, "print_float:");
-    emit(cg, "    push ebx");
-    emit(cg, "    push ecx");
-    emit(cg, "    push edx");
-    emit(cg, "    push esi");
-    emit(cg, "    sub esp, 12");
-    emit(cg, "    fst dword [esp]");
-    emit(cg, "    mov eax, [esp]");
-    emit(cg, "    test eax, 0x80000000");
-    emit(cg, "    jz .pos");
-    emit(cg, "    mov al, '-'");
-    emit(cg, "    mov ah, 0x0F");
-    emit(cg, "    stosw");
-    emit(cg, "    fchs");
-    emit(cg, ".pos:");
-    emit(cg, "    fld st0");
-    emit(cg, "    mov dword [esp+8], 0x3F000000");
-    emit(cg, "    fld dword [esp+8]");
-    emit(cg, "    fsubp st1, st0");
-    emit(cg, "    fistp dword [esp]");
-    emit(cg, "    mov eax, [esp]");
-    emit(cg, "    fild dword [esp]");
-    emit(cg, "    fsubp st1, st0");
-    emit(cg, "    mov eax, [esp]");
-    emit(cg, "    call print_int");
-    emit(cg, "    mov al, '.'");
-    emit(cg, "    mov ah, 0x0F");
-    emit(cg, "    stosw");
-    emit(cg, "    mov dword [esp+4], 1000000");
-    emit(cg, "    fild dword [esp+4]");
-    emit(cg, "    fmulp st1, st0");
-    emit(cg, "    fistp dword [esp]");
-    emit(cg, "    mov eax, [esp]");
-    emit(cg, "    test eax, eax");
-    emit(cg, "    jns .got_frac");
-    emit(cg, "    neg eax");
-    emit(cg, ".got_frac:");
-    emit(cg, "    mov esi, 100000");
-    emit(cg, ".frac_loop:");
-    emit(cg, "    xor edx, edx");
-    emit(cg, "    div esi");
-    emit(cg, "    add al, '0'");
-    emit(cg, "    mov ah, 0x0F");
-    emit(cg, "    stosw");
-    emit(cg, "    mov eax, edx");
-    emit(cg, "    mov edx, esi");
-    emit(cg, "    mov esi, 10");
-    emit(cg, "    push eax");
-    emit(cg, "    mov eax, edx");
-    emit(cg, "    xor edx, edx");
-    emit(cg, "    div esi");
-    emit(cg, "    mov esi, eax");
-    emit(cg, "    pop eax");
-    emit(cg, "    test esi, esi");
-    emit(cg, "    jnz .frac_loop");
-    emit(cg, "    add esp, 12");
+    emit(cg, "    mov edi, [vga_cursor]");
+    emit(cg, "    mov [esi + edi*2], ax");
+    emit(cg, "    inc dword [vga_cursor]");
+    emit(cg, "    loop .pi_print");
     emit(cg, "    pop esi");
     emit(cg, "    pop edx");
     emit(cg, "    pop ecx");
     emit(cg, "    pop ebx");
+    emit(cg, "    pop ebp");
+    emit(cg, "    ret");
+    emit(cg, "");
+
+    emit(cg, "set_cursor:");
+    emit(cg, "    push ebp");
+    emit(cg, "    mov ebp, esp");
+    emit(cg, "    mov eax, [ebp+8]");
+    emit(cg, "    mov [vga_cursor], eax");
+    emit(cg, "    pop ebp");
+    emit(cg, "    ret");
+    emit(cg, "");
+
+    emit(cg, "get_cursor:");
+    emit(cg, "    mov eax, [vga_cursor]");
+    emit(cg, "    ret");
+    emit(cg, "");
+
+    emit(cg, "newline:");
+    emit(cg, "    push ebp");
+    emit(cg, "    mov ebp, esp");
+    emit(cg, "    mov eax, [vga_cursor]");
+    emit(cg, "    mov ebx, 80");
+    emit(cg, "    xor edx, edx");
+    emit(cg, "    div ebx");
+    emit(cg, "    inc eax");
+    emit(cg, "    imul eax, 80");
+    emit(cg, "    mov [vga_cursor], eax");
+    emit(cg, "    pop ebp");
+    emit(cg, "    ret");
+    emit(cg, "");
+
+    emit(cg, "clear_screen:");
+    emit(cg, "    push edi");
+    emit(cg, "    push ecx");
+    emit(cg, "    mov edi, 0xB8000");
+    emit(cg, "    mov ecx, 2000");
+    emit(cg, "    mov ax, 0x0F20      ; white space");
+    emit(cg, "    rep stosw");
+    emit(cg, "    mov dword [vga_cursor], 0");
+    emit(cg, "    pop ecx");
+    emit(cg, "    pop edi");
     emit(cg, "    ret");
     emit(cg, "");
 
@@ -850,10 +913,132 @@ static void codegen_emit_runtime(CodeGen* cg)
     emit(cg, "");
 }
 
+/* ====================== Address Generation (for lvalues) ====================== */
+
+// Generate code that leaves the ADDRESS of an lvalue in EAX
+static void codegen_lvalue_address(CodeGen* cg, AST* expr);
+
+static void codegen_lvalue_address(CodeGen* cg, AST* expr) {
+    if (!expr) return;
+
+    switch (expr->type) {
+    case N_IDENT:
+    {
+        Local* entry = symtab_lookup_entry(&cg->symtab, expr->data.ident.name);
+        if (entry) {
+            if (entry->is_param) {
+                emit(cg, "    lea eax, [ebp + %d]  ; Address of param %s",
+                    entry->offset, expr->data.ident.name);
+            }
+            else {
+                emit(cg, "    lea eax, [ebp - %d]  ; Address of local %s",
+                    entry->offset, expr->data.ident.name);
+            }
+        }
+        else {
+            emit(cg, "    mov eax, %s  ; Address of global %s",
+                expr->data.ident.name, expr->data.ident.name);
+        }
+        break;
+    }
+
+    case N_ARRAY_ACCESS:
+    {
+        AST* arr = expr->data.array_access.array;
+        AST* idx = expr->data.array_access.index;
+
+        int element_size = 1;
+        if (arr->type == N_IDENT) {
+            element_size = get_element_size_for_var(cg, arr->data.ident.name);
+        }
+
+        // Get base address
+        if (arr->type == N_IDENT) {
+            Local* entry = symtab_lookup_entry(&cg->symtab, arr->data.ident.name);
+            if (entry && entry->is_array && !entry->is_param) {
+                emit(cg, "    lea eax, [ebp - %d]  ; Array base", entry->offset);
+            }
+            else if (entry) {
+                if (entry->is_param) {
+                    emit(cg, "    mov eax, [ebp + %d]  ; Load pointer param", entry->offset);
+                }
+                else {
+                    emit(cg, "    mov eax, [ebp - %d]  ; Load pointer local", entry->offset);
+                }
+            }
+            else {
+                GlobalVar* gv = globtab_lookup(&cg->globtab, arr->data.ident.name);
+                if (gv && gv->is_array) {
+                    emit(cg, "    mov eax, %s  ; Array address", arr->data.ident.name);
+                }
+                else {
+                    emit(cg, "    mov eax, [%s]  ; Load global pointer", arr->data.ident.name);
+                }
+            }
+        }
+        else {
+            codegen_expression(cg, arr);
+        }
+
+        emit(cg, "    push eax  ; Save base");
+        codegen_expression(cg, idx);
+        emit_scale_index(cg, element_size);
+        emit(cg, "    pop ebx  ; Restore base");
+        emit(cg, "    add eax, ebx  ; Compute element address");
+        break;
+    }
+
+    case N_UNARY:
+        if (expr->data.unary.op == TOKEN_STAR) {
+            // *ptr - address is the value of ptr
+            codegen_expression(cg, expr->data.unary.operand);
+        }
+        break;
+
+    case N_MEMBER_ACCESS:
+    {
+        AST* obj = expr->data.member_access.object;
+        char* member = expr->data.member_access.member;
+        int is_arrow = expr->data.member_access.is_arrow;
+
+        const char* struct_type = NULL;
+        if (obj->type == N_IDENT) {
+            struct_type = get_var_struct_type(cg, obj->data.ident.name);
+        }
+
+        if (!struct_type) {
+            emit(cg, "    ; WARNING: Unknown struct type for member access");
+            emit(cg, "    xor eax, eax");
+            return;
+        }
+
+        int offset = codegen_get_member_offset(cg, struct_type, member);
+        if (offset < 0) {
+            emit(cg, "    ; WARNING: Member '%s' not found in struct '%s'", member, struct_type);
+            emit(cg, "    xor eax, eax");
+            return;
+        }
+
+        if (is_arrow) {
+            codegen_expression(cg, obj);  // Get pointer value
+            emit(cg, "    add eax, %d  ; Offset to member %s", offset, member);
+        }
+        else {
+            codegen_lvalue_address(cg, obj);  // Get struct address
+            emit(cg, "    add eax, %d  ; Offset to member %s", offset, member);
+        }
+        break;
+    }
+
+    default:
+        emit(cg, "    ; ERROR: Cannot take address of expression type %d", expr->type);
+        break;
+    }
+}
+
 /* ====================== Expression Code Generation ====================== */
 
-void codegen_expression(CodeGen* cg, AST* expr)
-{
+void codegen_expression(CodeGen* cg, AST* expr) {
     if (!expr) {
         emit(cg, "    xor eax, eax     ; NULL expression");
         return;
@@ -872,36 +1057,38 @@ void codegen_expression(CodeGen* cg, AST* expr)
     }
 
     case N_CHAR_LIT:
-        emit(cg, "    mov eax, %d  ; '%c'",
+        emit(cg, "    mov eax, %d  ; char '%c'",
             (unsigned char)expr->data.char_lit.value,
-            expr->data.char_lit.value >= 32 ? expr->data.char_lit.value : '?');
+            expr->data.char_lit.value >= 32 && expr->data.char_lit.value < 127
+            ? expr->data.char_lit.value : '?');
         break;
 
     case N_IDENT:
     {
         Local* entry = symtab_lookup_entry(&cg->symtab, expr->data.ident.name);
         if (entry) {
-            if (!entry->is_param && entry->size > 4 && entry->pointer_level == 0) {
+            if (entry->is_array && !entry->is_param) {
+                // Local array - return address
                 emit(cg, "    lea eax, [ebp - %d]  ; Address of array %s",
                     entry->offset, expr->data.ident.name);
             }
             else if (entry->is_param) {
-                emit(cg, "    mov eax, [ebp + %d]  ; Load param %s",
+                emit(cg, "    mov eax, [ebp + %d]  ; Param %s",
                     entry->offset, expr->data.ident.name);
             }
             else {
-                emit(cg, "    mov eax, [ebp - %d]  ; Load local %s",
+                emit(cg, "    mov eax, [ebp - %d]  ; Local %s",
                     entry->offset, expr->data.ident.name);
             }
         }
         else {
             GlobalVar* gv = globtab_lookup(&cg->globtab, expr->data.ident.name);
             if (gv && gv->is_array) {
-                emit(cg, "    mov eax, %s  ; Address of global array %s",
-                    expr->data.ident.name, expr->data.ident.name);
+                emit(cg, "    mov eax, %s  ; Address of global array",
+                    expr->data.ident.name);
             }
             else {
-                emit(cg, "    mov eax, [%s]  ; Load global %s",
+                emit(cg, "    mov eax, [%s]  ; Global %s",
                     expr->data.ident.name, expr->data.ident.name);
             }
         }
@@ -914,60 +1101,71 @@ void codegen_expression(CodeGen* cg, AST* expr)
         char* member = expr->data.member_access.member;
         int is_arrow = expr->data.member_access.is_arrow;
 
-        char* struct_type = NULL;
+        const char* struct_type = NULL;
         if (obj->type == N_IDENT) {
-            if (strcmp(obj->data.ident.name, "cursor") == 0) {
-                struct_type = "Cursor";
-            }
-            else if (strstr(obj->data.ident.name, "buffer") != NULL ||
-                strcmp(obj->data.ident.name, "rb") == 0) {
-                struct_type = "RingBuffer";
-            }
-            else if (strstr(obj->data.ident.name, "task") != NULL) {
-                struct_type = "Task";
-            }
-            else if (strstr(obj->data.ident.name, "current") != NULL ||
-                strstr(obj->data.ident.name, "block") != NULL ||
-                strstr(obj->data.ident.name, "next") != NULL) {
-                struct_type = "MemBlock";
-            }
+            struct_type = get_var_struct_type(cg, obj->data.ident.name);
         }
 
         if (!struct_type) {
-            emit(cg, "    ; WARNING: Cannot determine struct type for %s.%s",
-                obj->type == N_IDENT ? obj->data.ident.name : "expr", member);
+            emit(cg, "    ; WARNING: Cannot determine struct type");
             emit(cg, "    xor eax, eax");
             break;
         }
 
         int offset = codegen_get_member_offset(cg, struct_type, member);
+        int mem_size = codegen_get_member_size(cg, struct_type, member);
+
         if (offset < 0) {
-            emit(cg, "    ; WARNING: Member '%s' not found in struct '%s'", member, struct_type);
+            emit(cg, "    ; WARNING: Member '%s' not found", member);
             emit(cg, "    xor eax, eax");
             break;
         }
 
         if (is_arrow) {
+            // ptr->member
             codegen_expression(cg, obj);
-            emit(cg, "    mov eax, [eax + %d]  ; Load %s->%s", offset,
-                obj->type == N_IDENT ? obj->data.ident.name : "ptr", member);
+            if (mem_size == 1) {
+                emit(cg, "    movzx eax, byte [eax + %d]  ; %s->%s (byte)",
+                    offset, obj->data.ident.name, member);
+            }
+            else if (mem_size == 2) {
+                emit(cg, "    movzx eax, word [eax + %d]  ; %s->%s (word)",
+                    offset, obj->data.ident.name, member);
+            }
+            else {
+                emit(cg, "    mov eax, [eax + %d]  ; %s->%s",
+                    offset, obj->data.ident.name, member);
+            }
         }
         else {
+            // struct.member
             if (obj->type == N_IDENT) {
                 Local* entry = symtab_lookup_entry(&cg->symtab, obj->data.ident.name);
                 if (entry) {
-                    if (entry->is_param) {
-                        emit(cg, "    mov eax, [ebp + %d + %d]  ; Load %s.%s",
-                            entry->offset, offset, obj->data.ident.name, member);
+                    int base = entry->is_param ? entry->offset : -entry->offset;
+                    char* sign = entry->is_param ? "+" : "-";
+                    if (mem_size == 1) {
+                        emit(cg, "    movzx eax, byte [ebp %s %d + %d]  ; %s.%s",
+                            sign, entry->offset, offset, obj->data.ident.name, member);
+                    }
+                    else if (mem_size == 2) {
+                        emit(cg, "    movzx eax, word [ebp %s %d + %d]  ; %s.%s",
+                            sign, entry->offset, offset, obj->data.ident.name, member);
                     }
                     else {
-                        emit(cg, "    mov eax, [ebp - %d + %d]  ; Load %s.%s",
-                            entry->offset, offset, obj->data.ident.name, member);
+                        emit(cg, "    mov eax, [ebp %s %d + %d]  ; %s.%s",
+                            sign, entry->offset, offset, obj->data.ident.name, member);
                     }
                 }
                 else {
-                    emit(cg, "    mov eax, [%s + %d]  ; Load %s.%s",
-                        obj->data.ident.name, offset, obj->data.ident.name, member);
+                    if (mem_size == 1) {
+                        emit(cg, "    movzx eax, byte [%s + %d]  ; %s.%s",
+                            obj->data.ident.name, offset, obj->data.ident.name, member);
+                    }
+                    else {
+                        emit(cg, "    mov eax, [%s + %d]  ; %s.%s",
+                            obj->data.ident.name, offset, obj->data.ident.name, member);
+                    }
                 }
             }
         }
@@ -976,109 +1174,94 @@ void codegen_expression(CodeGen* cg, AST* expr)
 
     case N_OPERATOR:
     {
-        if (expr->data.op.op == TOKEN_ASSIGN &&
-            expr->data.op.left->type == N_MEMBER_ACCESS) {
+        Tokens op = expr->data.op.op;
+        AST* left = expr->data.op.left;
+        AST* right = expr->data.op.right;
 
-            AST* member_access = expr->data.op.left;
-            AST* obj = member_access->data.member_access.object;
-            char* member = member_access->data.member_access.member;
-            int is_arrow = member_access->data.member_access.is_arrow;
-
-            char* struct_type = NULL;
-            if (obj->type == N_IDENT) {
-                if (strcmp(obj->data.ident.name, "cursor") == 0) {
-                    struct_type = "Cursor";
-                }
-                else if (strstr(obj->data.ident.name, "buffer") != NULL) {
-                    struct_type = "RingBuffer";
-                }
-                else if (strstr(obj->data.ident.name, "task") != NULL) {
-                    struct_type = "Task";
-                }
-                else if (strstr(obj->data.ident.name, "current") != NULL ||
-                    strstr(obj->data.ident.name, "block") != NULL ||
-                    strstr(obj->data.ident.name, "new_block") != NULL) {
-                    struct_type = "MemBlock";
-                }
-            }
-
-            if (struct_type) {
-                int offset = codegen_get_member_offset(cg, struct_type, member);
-                if (offset >= 0) {
-                    codegen_expression(cg, expr->data.op.right);
-                    emit(cg, "    push eax  ; Save value");
-
-                    if (is_arrow) {
-                        codegen_expression(cg, obj);
-                        emit(cg, "    mov ebx, eax  ; Pointer in ebx");
-                        emit(cg, "    pop eax  ; Restore value");
-                        emit(cg, "    mov [ebx + %d], eax  ; Store to ->%s", offset, member);
-                    }
-                    else {
-                        if (obj->type == N_IDENT) {
-                            Local* entry = symtab_lookup_entry(&cg->symtab, obj->data.ident.name);
-                            emit(cg, "    pop eax  ; Restore value");
-                            if (entry) {
-                                if (entry->is_param) {
-                                    emit(cg, "    mov [ebp + %d + %d], eax  ; Store to %s.%s",
-                                        entry->offset, offset, obj->data.ident.name, member);
-                                }
-                                else {
-                                    emit(cg, "    mov [ebp - %d + %d], eax  ; Store to %s.%s",
-                                        entry->offset, offset, obj->data.ident.name, member);
-                                }
-                            }
-                            else {
-                                emit(cg, "    mov [%s + %d], eax  ; Store to %s.%s",
-                                    obj->data.ident.name, offset, obj->data.ident.name, member);
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-
-        if (expr->data.op.op == TOKEN_ASSIGN && expr->data.op.left->type == N_ARRAY_ACCESS) {
-            AST* arr_access = expr->data.op.left;
-            AST* array_expr = arr_access->data.array_access.array;
-
-            int element_size = 1;
-            if (array_expr->type == N_IDENT) {
-                element_size = get_element_size_for_var(cg, array_expr->data.ident.name);
-            }
-
-            if (array_expr->type == N_IDENT) {
-                Local* entry = symtab_lookup_entry(&cg->symtab, array_expr->data.ident.name);
-                if (entry && !entry->is_param && entry->pointer_level == 0 && entry->size > 4) {
-                    emit(cg, "    lea eax, [ebp - %d]  ; Load array base address", entry->offset);
-                    emit(cg, "    mov edi, eax     ; Array base in edi");
-                }
-                else {
-                    codegen_expression(cg, array_expr);
-                    emit(cg, "    mov edi, eax     ; Pointer value in edi");
-                }
-            }
-            else {
-                codegen_expression(cg, array_expr);
-                emit(cg, "    mov edi, eax     ; Array base in edi");
-            }
-
-            codegen_expression(cg, arr_access->data.array_access.index);
-            emit_scale_index(cg, element_size);
-            emit(cg, "    add edi, eax     ; Add scaled index to base");
-            codegen_expression(cg, expr->data.op.right);
-            emit_store_sized(cg, element_size, "edi");
+        // Handle assignment to member access
+        if (op == TOKEN_ASSIGN && left->type == N_MEMBER_ACCESS) {
+            codegen_expression(cg, right);
+            emit(cg, "    push eax  ; Save value");
+            codegen_lvalue_address(cg, left);
+            emit(cg, "    mov ebx, eax  ; Address in ebx");
+            emit(cg, "    pop eax  ; Restore value");
+            emit(cg, "    mov [ebx], eax  ; Store");
             break;
         }
 
-        codegen_expression(cg, expr->data.op.left);
-        emit(cg, "    push eax         ; Save left operand");
-        codegen_expression(cg, expr->data.op.right);
-        emit(cg, "    mov ebx, eax     ; Right operand in ebx");
-        emit(cg, "    pop eax          ; Restore left operand");
+        // Handle assignment to array element
+        if (op == TOKEN_ASSIGN && left->type == N_ARRAY_ACCESS) {
+            codegen_expression(cg, right);
+            emit(cg, "    push eax  ; Save value");
+            codegen_lvalue_address(cg, left);
+            emit(cg, "    mov ebx, eax  ; Element address in ebx");
+            emit(cg, "    pop eax  ; Restore value");
 
-        switch (expr->data.op.op) {
+            int element_size = 1;
+            if (left->data.array_access.array->type == N_IDENT) {
+                element_size = get_element_size_for_var(cg,
+                    left->data.array_access.array->data.ident.name);
+            }
+            emit_store_sized(cg, element_size, "ebx");
+            break;
+        }
+
+        // Handle assignment to dereferenced pointer
+        if (op == TOKEN_ASSIGN && left->type == N_UNARY &&
+            left->data.unary.op == TOKEN_STAR) {
+            codegen_expression(cg, right);
+            emit(cg, "    push eax  ; Save value");
+            codegen_expression(cg, left->data.unary.operand);
+            emit(cg, "    mov ebx, eax  ; Address in ebx");
+            emit(cg, "    pop eax  ; Restore value");
+            emit(cg, "    mov [ebx], eax  ; Store through pointer");
+            break;
+        }
+
+        // Handle compound assignment operators
+        if (op == TOKEN_PLUS_ASSIGN || op == TOKEN_MINUS_ASSIGN ||
+            op == TOKEN_STAR_ASSIGN || op == TOKEN_SLASH_ASSIGN) {
+
+            codegen_lvalue_address(cg, left);
+            emit(cg, "    push eax  ; Save address");
+            emit(cg, "    mov eax, [eax]  ; Load current value");
+            emit(cg, "    push eax  ; Save current value");
+
+            codegen_expression(cg, right);
+            emit(cg, "    mov ebx, eax  ; Right value in ebx");
+            emit(cg, "    pop eax  ; Restore current value");
+
+            switch (op) {
+            case TOKEN_PLUS_ASSIGN:
+                emit(cg, "    add eax, ebx");
+                break;
+            case TOKEN_MINUS_ASSIGN:
+                emit(cg, "    sub eax, ebx");
+                break;
+            case TOKEN_STAR_ASSIGN:
+                emit(cg, "    imul eax, ebx");
+                break;
+            case TOKEN_SLASH_ASSIGN:
+                emit(cg, "    cdq");
+                emit(cg, "    idiv ebx");
+                break;
+            default:
+                break;
+            }
+
+            emit(cg, "    pop ebx  ; Restore address");
+            emit(cg, "    mov [ebx], eax  ; Store result");
+            break;
+        }
+
+        // Regular binary operators
+        codegen_expression(cg, left);
+        emit(cg, "    push eax         ; Save left operand");
+        codegen_expression(cg, right);
+        emit(cg, "    mov ebx, eax     ; Right in ebx");
+        emit(cg, "    pop eax          ; Left in eax");
+
+        switch (op) {
         case TOKEN_PLUS:
             emit(cg, "    add eax, ebx");
             break;
@@ -1089,13 +1272,13 @@ void codegen_expression(CodeGen* cg, AST* expr)
             emit(cg, "    imul eax, ebx");
             break;
         case TOKEN_SLASH:
-            emit(cg, "    cdq              ; Sign-extend eax to edx:eax");
-            emit(cg, "    idiv ebx         ; eax = eax / ebx");
+            emit(cg, "    cdq");
+            emit(cg, "    idiv ebx");
             break;
         case TOKEN_PERCENT:
             emit(cg, "    cdq");
             emit(cg, "    idiv ebx");
-            emit(cg, "    mov eax, edx  ; Remainder in edx");
+            emit(cg, "    mov eax, edx  ; Remainder");
             break;
         case TOKEN_LSHIFT:
             emit(cg, "    mov ecx, ebx");
@@ -1153,11 +1336,8 @@ void codegen_expression(CodeGen* cg, AST* expr)
             emit(cg, "    movzx eax, al");
             break;
         case TOKEN_OR:
-            emit(cg, "    test eax, eax");
+            emit(cg, "    or eax, ebx");
             emit(cg, "    setne al");
-            emit(cg, "    test ebx, ebx");
-            emit(cg, "    setne bl");
-            emit(cg, "    or al, bl");
             emit(cg, "    movzx eax, al");
             break;
         case TOKEN_ASSIGN:
@@ -1165,7 +1345,7 @@ void codegen_expression(CodeGen* cg, AST* expr)
             emit(cg, "    mov eax, ebx");
             break;
         default:
-            emit(cg, "    ; TODO: Operator %d", expr->data.op.op);
+            emit(cg, "    ; Unknown operator %d", op);
             break;
         }
         break;
@@ -1173,15 +1353,20 @@ void codegen_expression(CodeGen* cg, AST* expr)
 
     case N_CALL:
     {
-        emit(cg, "    ; Call function: %s", expr->data.call.name);
+        emit(cg, "    ; Call %s", expr->data.call.name);
+
+        // Push arguments right to left (cdecl)
         for (int i = (int)expr->data.call.arg_count - 1; i >= 0; i--) {
             codegen_expression(cg, expr->data.call.args[i]);
-            emit(cg, "    push eax         ; Push arg %d", i);
+            emit(cg, "    push eax         ; Arg %d", i);
         }
+
         emit(cg, "    call %s", expr->data.call.name);
+
+        // Caller cleans stack
         if (expr->data.call.arg_count > 0) {
-            emit(cg, "    add esp, %d      ; Clean %d args",
-                (int)expr->data.call.arg_count * 4, (int)expr->data.call.arg_count);
+            emit(cg, "    add esp, %d      ; Clean %zu args",
+                (int)expr->data.call.arg_count * 4, expr->data.call.arg_count);
         }
         break;
     }
@@ -1189,20 +1374,20 @@ void codegen_expression(CodeGen* cg, AST* expr)
     case N_ASSIGN:
     {
         Local* entry = symtab_lookup_entry(&cg->symtab, expr->data.assign.var_name);
+        codegen_expression(cg, expr->data.assign.value);
+
         if (entry) {
-            codegen_expression(cg, expr->data.assign.value);
             if (entry->is_param) {
-                emit(cg, "    mov [ebp + %d], eax  ; Store to param %s",
+                emit(cg, "    mov [ebp + %d], eax  ; Param %s",
                     entry->offset, expr->data.assign.var_name);
             }
             else {
-                emit(cg, "    mov [ebp - %d], eax  ; Store to local %s",
+                emit(cg, "    mov [ebp - %d], eax  ; Local %s",
                     entry->offset, expr->data.assign.var_name);
             }
         }
         else {
-            codegen_expression(cg, expr->data.assign.value);
-            emit(cg, "    mov [%s], eax  ; Store to global %s",
+            emit(cg, "    mov [%s], eax  ; Global %s",
                 expr->data.assign.var_name, expr->data.assign.var_name);
         }
         break;
@@ -1210,116 +1395,56 @@ void codegen_expression(CodeGen* cg, AST* expr)
 
     case N_ARRAY_ACCESS:
     {
-        AST* array_expr = expr->data.array_access.array;
+        AST* arr = expr->data.array_access.array;
 
         int element_size = 1;
-        if (array_expr->type == N_IDENT) {
-            element_size = get_element_size_for_var(cg, array_expr->data.ident.name);
+        if (arr->type == N_IDENT) {
+            element_size = get_element_size_for_var(cg, arr->data.ident.name);
         }
 
-        if (array_expr->type == N_IDENT) {
-            Local* entry = symtab_lookup_entry(&cg->symtab, array_expr->data.ident.name);
-
-            if (entry && !entry->is_param && entry->pointer_level == 0 && entry->size > 4) {
-                emit(cg, "    lea eax, [ebp - %d]  ; Load array base address", entry->offset);
-                emit(cg, "    push eax  ; Save array base");
-                codegen_expression(cg, expr->data.array_access.index);
-                emit_scale_index(cg, element_size);
-                emit(cg, "    pop ebx   ; Restore array base");
-                emit(cg, "    add eax, ebx  ; Compute element address");
-                emit_load_sized(cg, element_size);
-            }
-            else {
-                codegen_expression(cg, array_expr);
-                emit(cg, "    push eax  ; Save pointer value");
-                codegen_expression(cg, expr->data.array_access.index);
-                emit_scale_index(cg, element_size);
-                emit(cg, "    pop ebx   ; Restore pointer");
-                emit(cg, "    add eax, ebx  ; Compute address");
-                emit_load_sized(cg, element_size);
-            }
-        }
-        else {
-            codegen_expression(cg, array_expr);
-            emit(cg, "    push eax  ; Save array ptr");
-            codegen_expression(cg, expr->data.array_access.index);
-            emit_scale_index(cg, element_size);
-            emit(cg, "    pop ebx   ; Restore array ptr");
-            emit(cg, "    add eax, ebx  ; Compute address");
-            emit_load_sized(cg, element_size);
-        }
+        codegen_lvalue_address(cg, expr);
+        emit_load_sized(cg, element_size);
         break;
     }
 
     case N_CAST:
     {
-        if (expr->data.cast.expr->type == N_INTLIT) {
-            emit(cg, "    mov eax, 0x%X  ; Cast constant",
-                expr->data.cast.expr->data.int_lit.value);
-        }
-        else {
-            codegen_expression(cg, expr->data.cast.expr);
-        }
+        codegen_expression(cg, expr->data.cast.expr);
+        // Type casts in C don't change the bits, just the interpretation
+        // For now, just pass through
         break;
     }
 
     case N_UNARY:
     {
-        if (expr->data.unary.op == TOKEN_AMPERSAND) {
-            AST* target = expr->data.unary.operand;
-            if (target->type == N_IDENT) {
-                Local* entry = symtab_lookup_entry(&cg->symtab, target->data.ident.name);
-                if (entry) {
-                    if (entry->is_param) {
-                        emit(cg, "    lea eax, [ebp + %d]  ; Address of param %s",
-                            entry->offset, target->data.ident.name);
-                    }
-                    else {
-                        emit(cg, "    lea eax, [ebp - %d]  ; Address of local %s",
-                            entry->offset, target->data.ident.name);
-                    }
-                }
-                else {
-                    emit(cg, "    mov eax, %s  ; Address of global %s",
-                        target->data.ident.name, target->data.ident.name);
-                }
-            }
-            else if (target->type == N_ARRAY_ACCESS) {
-                AST* arr = target->data.array_access.array;
-                AST* idx = target->data.array_access.index;
+        Tokens op = expr->data.unary.op;
+        AST* operand = expr->data.unary.operand;
 
-                int element_size = 1;
-                if (arr->type == N_IDENT) {
-                    element_size = get_element_size_for_var(cg, arr->data.ident.name);
-                }
-
-                if (arr->type == N_IDENT) {
-                    Local* entry = symtab_lookup_entry(&cg->symtab, arr->data.ident.name);
-                    if (entry && !entry->is_param && entry->size > 4) {
-                        emit(cg, "    lea eax, [ebp - %d]  ; Load array base address", entry->offset);
-                    }
-                    else {
-                        codegen_expression(cg, arr);
-                    }
-                }
-                else {
-                    codegen_expression(cg, arr);
-                }
-                emit(cg, "    push eax  ; Save array base");
-                codegen_expression(cg, idx);
-                emit_scale_index(cg, element_size);
-                emit(cg, "    pop ebx   ; Restore array base");
-                emit(cg, "    add eax, ebx  ; Compute element address");
-            }
-            else {
-                emit(cg, "    ; TODO: Address-of complex expression");
-                codegen_expression(cg, target);
-            }
+        // Address-of operator
+        if (op == TOKEN_AMPERSAND) {
+            codegen_lvalue_address(cg, operand);
             break;
         }
 
-        codegen_expression(cg, expr->data.unary.operand);
-        switch (expr->data.unary.op) {
+        // Prefix increment/decrement
+        if (op == TOKEN_PLUS_PLUS || op == TOKEN_MINUS_MINUS) {
+            codegen_lvalue_address(cg, operand);
+            emit(cg, "    mov ebx, eax  ; Save address");
+            emit(cg, "    mov eax, [ebx]  ; Load value");
+            if (op == TOKEN_PLUS_PLUS) {
+                emit(cg, "    inc eax  ; Prefix increment");
+            }
+            else {
+                emit(cg, "    dec eax  ; Prefix decrement");
+            }
+            emit(cg, "    mov [ebx], eax  ; Store back");
+            break;
+        }
+
+        // Other unary operators
+        codegen_expression(cg, operand);
+
+        switch (op) {
         case TOKEN_MINUS:
             emit(cg, "    neg eax");
             break;
@@ -1332,10 +1457,10 @@ void codegen_expression(CodeGen* cg, AST* expr)
             emit(cg, "    movzx eax, al");
             break;
         case TOKEN_STAR:
-            emit(cg, "    mov eax, [eax]");
+            emit(cg, "    mov eax, [eax]  ; Dereference");
             break;
         default:
-            emit(cg, "    ; TODO: Unary operator %d", expr->data.unary.op);
+            emit(cg, "    ; Unknown unary %d", op);
             break;
         }
         break;
@@ -1343,26 +1468,44 @@ void codegen_expression(CodeGen* cg, AST* expr)
 
     case N_TERNARY:
     {
-        int label_false = codegen_new_label(cg);
-        int label_end = codegen_new_label(cg);
+        int lbl_false = codegen_new_label(cg);
+        int lbl_end = codegen_new_label(cg);
 
         codegen_expression(cg, expr->data.ternary.condition);
         emit(cg, "    test eax, eax");
-        emit(cg, "    jz .L%d", label_false);
+        emit(cg, "    jz .L%d", lbl_false);
 
         codegen_expression(cg, expr->data.ternary.true_expr);
-        emit(cg, "    jmp .L%d", label_end);
+        emit(cg, "    jmp .L%d", lbl_end);
 
-        emit(cg, ".L%d:", label_false);
+        emit(cg, ".L%d:", lbl_false);
         codegen_expression(cg, expr->data.ternary.false_expr);
 
-        emit(cg, ".L%d:", label_end);
+        emit(cg, ".L%d:", lbl_end);
         break;
     }
 
     case N_SIZEOF:
     {
-        emit(cg, "    mov eax, 4  ; sizeof (simplified)");
+        // Simplified sizeof - returns 4 for most things
+        // In a full implementation, we'd compute actual type sizes
+        AST* target = expr->data.sizeof_expr.expr;
+        int size = 4;
+
+        if (target->type == N_IDENT) {
+            // Check if it's a type name
+            const char* name = target->data.ident.name;
+            if (strcmp(name, "char") == 0) size = 1;
+            else if (strcmp(name, "short") == 0) size = 2;
+            else if (strcmp(name, "int") == 0) size = 4;
+            else if (strcmp(name, "long") == 0) size = 4;
+            else if (strncmp(name, "struct ", 7) == 0) {
+                StructInfo* info = codegen_find_struct(cg, name + 7);
+                if (info) size = info->total_size;
+            }
+        }
+
+        emit(cg, "    mov eax, %d  ; sizeof", size);
         break;
     }
 
@@ -1375,38 +1518,37 @@ void codegen_expression(CodeGen* cg, AST* expr)
 
 /* ====================== Statement Code Generation ====================== */
 
-void codegen_statement(CodeGen* cg, AST* stmt)
-{
+void codegen_statement(CodeGen* cg, AST* stmt) {
     if (!stmt) return;
 
     switch (stmt->type) {
     case N_DECL:
     {
-        emit(cg, "    ; Declare variable: %s", stmt->data.decl.name);
-        int offset;
+        int is_array = (stmt->data.decl.array_size != NULL);
+        int array_count = 0;
 
-        if (stmt->data.decl.array_size && stmt->data.decl.array_size->type == N_INTLIT) {
-            int arr_size = stmt->data.decl.array_size->data.int_lit.value;
-            offset = symtab_add_array_typed(&cg->symtab, stmt->data.decl.name, arr_size,
-                stmt->data.decl.type, stmt->data.decl.pointer_level);
-            emit(cg, "    ; Array %s[%d] at [ebp - %d]",
-                stmt->data.decl.name, arr_size, offset);
+        if (is_array && stmt->data.decl.array_size->type == N_INTLIT) {
+            array_count = stmt->data.decl.array_size->data.int_lit.value;
         }
-        else {
-            offset = symtab_add_typed(&cg->symtab, stmt->data.decl.name,
-                stmt->data.decl.type, stmt->data.decl.pointer_level);
-        }
+
+        int offset = symtab_add_typed(&cg->symtab,
+            stmt->data.decl.name,
+            stmt->data.decl.type,
+            stmt->data.decl.pointer_level,
+            is_array,
+            array_count);
+
+        emit(cg, "    ; Declare %s at [ebp - %d]", stmt->data.decl.name, offset);
 
         if (stmt->data.decl.init_value) {
             codegen_expression(cg, stmt->data.decl.init_value);
-            emit(cg, "    mov [ebp - %d], eax  ; Initialize %s",
-                offset, stmt->data.decl.name);
+            emit(cg, "    mov [ebp - %d], eax", offset);
         }
         break;
     }
 
     case N_RETURN:
-        emit(cg, "    ; Return statement");
+        emit(cg, "    ; Return");
         if (stmt->data.return_stmt.value) {
             codegen_expression(cg, stmt->data.return_stmt.value);
         }
@@ -1424,82 +1566,107 @@ void codegen_statement(CodeGen* cg, AST* stmt)
 
     case N_IF:
     {
-        int label_else = codegen_new_label(cg);
-        int label_end = codegen_new_label(cg);
+        int lbl_else = codegen_new_label(cg);
+        int lbl_end = codegen_new_label(cg);
 
-        emit(cg, "    ; If statement");
+        emit(cg, "    ; If");
         codegen_expression(cg, stmt->data.if_stmt.condition);
         emit(cg, "    test eax, eax");
-        emit(cg, "    jz .L%d", stmt->data.if_stmt.else_block ? label_else : label_end);
-
-        codegen_statement(cg, stmt->data.if_stmt.then_block);
 
         if (stmt->data.if_stmt.else_block) {
-            emit(cg, "    jmp .L%d", label_end);
-            emit(cg, ".L%d:", label_else);
+            emit(cg, "    jz .L%d", lbl_else);
+            codegen_statement(cg, stmt->data.if_stmt.then_block);
+            emit(cg, "    jmp .L%d", lbl_end);
+            emit(cg, ".L%d:", lbl_else);
             codegen_statement(cg, stmt->data.if_stmt.else_block);
+            emit(cg, ".L%d:", lbl_end);
         }
-
-        emit(cg, ".L%d:", label_end);
+        else {
+            emit(cg, "    jz .L%d", lbl_end);
+            codegen_statement(cg, stmt->data.if_stmt.then_block);
+            emit(cg, ".L%d:", lbl_end);
+        }
         break;
     }
 
     case N_WHILE:
     {
-        int label_start = codegen_new_label(cg);
-        int label_end = codegen_new_label(cg);
+        int lbl_start = codegen_new_label(cg);
+        int lbl_end = codegen_new_label(cg);
 
-        emit(cg, ".L%d:  ; While loop start", label_start);
+        push_loop(lbl_end, lbl_start);
+
+        emit(cg, ".L%d:  ; While start", lbl_start);
         codegen_expression(cg, stmt->data.while_stmt.condition);
         emit(cg, "    test eax, eax");
-        emit(cg, "    jz .L%d", label_end);
+        emit(cg, "    jz .L%d", lbl_end);
 
         codegen_statement(cg, stmt->data.while_stmt.body);
 
-        emit(cg, "    jmp .L%d", label_start);
-        emit(cg, ".L%d:  ; While loop end", label_end);
+        emit(cg, "    jmp .L%d", lbl_start);
+        emit(cg, ".L%d:  ; While end", lbl_end);
+
+        pop_loop();
         break;
     }
 
     case N_FOR:
     {
-        int label_start = codegen_new_label(cg);
-        int label_end = codegen_new_label(cg);
+        int lbl_start = codegen_new_label(cg);
+        int lbl_cont = codegen_new_label(cg);
+        int lbl_end = codegen_new_label(cg);
+
+        push_loop(lbl_end, lbl_cont);
 
         emit(cg, "    ; For loop");
         if (stmt->data.for_stmt.init) {
             codegen_statement(cg, stmt->data.for_stmt.init);
         }
 
-        emit(cg, ".L%d:  ; For loop start", label_start);
+        emit(cg, ".L%d:  ; For condition", lbl_start);
         if (stmt->data.for_stmt.condition) {
             codegen_expression(cg, stmt->data.for_stmt.condition);
             emit(cg, "    test eax, eax");
-            emit(cg, "    jz .L%d", label_end);
+            emit(cg, "    jz .L%d", lbl_end);
         }
 
         codegen_statement(cg, stmt->data.for_stmt.body);
 
+        emit(cg, ".L%d:  ; For increment", lbl_cont);
         if (stmt->data.for_stmt.increment) {
             codegen_expression(cg, stmt->data.for_stmt.increment);
         }
 
-        emit(cg, "    jmp .L%d", label_start);
-        emit(cg, ".L%d:  ; For loop end", label_end);
+        emit(cg, "    jmp .L%d", lbl_start);
+        emit(cg, ".L%d:  ; For end", lbl_end);
+
+        pop_loop();
         break;
     }
 
-    case N_ASSIGN:
-        codegen_expression(cg, stmt);
-        break;
-
     case N_BREAK:
-        emit(cg, "    ; TODO: Break statement");
+    {
+        int lbl = get_break_label();
+        if (lbl >= 0) {
+            emit(cg, "    jmp .L%d  ; Break", lbl);
+        }
+        else {
+            emit(cg, "    ; ERROR: Break outside loop");
+        }
         break;
+    }
 
     case N_CONTINUE:
-        emit(cg, "    ; TODO: Continue statement");
+    {
+        int lbl = get_continue_label();
+        if (lbl >= 0) {
+            emit(cg, "    jmp .L%d  ; Continue", lbl);
+        }
+        else {
+            emit(cg, "    ; ERROR: Continue outside loop");
+        }
         break;
+    }
 
     case N_ASM:
     {
@@ -1519,6 +1686,12 @@ void codegen_statement(CodeGen* cg, AST* stmt)
         break;
     }
 
+    case N_ASSIGN:
+    case N_CALL:
+    case N_OPERATOR:
+        codegen_expression(cg, stmt);
+        break;
+
     default:
         codegen_expression(cg, stmt);
         break;
@@ -1527,73 +1700,86 @@ void codegen_statement(CodeGen* cg, AST* stmt)
 
 /* ====================== Function Code Generation ====================== */
 
-void codegen_function_correct(CodeGen* cg, AST* func)
-{
+void codegen_function(CodeGen* cg, AST* func) {
+    codegen_function_correct(cg, func);
+}
+
+void codegen_function_correct(CodeGen* cg, AST* func) {
     if (!func || func->type != N_FUNCTION) return;
+    if (!func->data.function.body) return;  // Forward declaration
 
-    if (func->data.function.body == NULL) {
-        return;
-    }
+    // Set global for struct lookup in symtab_add_typed
+    g_current_cg = cg;
 
+    // Reset symbol table for this function
     symtab_free(&cg->symtab);
     symtab_init(&cg->symtab);
+    loop_depth = 0;
 
     emit(cg, "");
-    emit(cg, "; Function: %s", func->data.function.name);
+    emit(cg, "; ========== Function: %s ==========", func->data.function.name);
     emit(cg, "%s:", func->data.function.name);
     emit(cg, "    push ebp");
     emit(cg, "    mov ebp, esp");
 
+    // Register parameters (cdecl: pushed right to left, so first param at ebp+8)
     for (size_t i = 0; i < func->data.function.param_count; i++) {
         AST* param = func->data.function.params[i];
         if (param->type == N_DECL) {
-            symtab_add_param_typed(&cg->symtab, param->data.decl.name, 8 + ((int)i * 4),
-                param->data.decl.type, param->data.decl.pointer_level);
+            int stack_pos = 8 + ((int)i * 4);
+            symtab_add_param_typed(&cg->symtab,
+                param->data.decl.name,
+                stack_pos,
+                param->data.decl.type,
+                param->data.decl.pointer_level);
+            emit(cg, "    ; Param %zu: %s at [ebp + %d]", i, param->data.decl.name, stack_pos);
         }
     }
 
-    emit(cg, "    sub esp, 512     ; Reserve stack space");
+    // Reserve stack space (we'll use a fixed amount for simplicity)
+    emit(cg, "    sub esp, 512     ; Reserve stack");
 
+    // Generate body
     codegen_statement(cg, func->data.function.body);
 
+    // Epilogue (jumped to by return statements)
     emit(cg, ".epilogue:");
     emit(cg, "    mov esp, ebp");
     emit(cg, "    pop ebp");
     emit(cg, "    ret");
 }
 
-void codegen_function(CodeGen* cg, AST* func)
-{
-    codegen_function_correct(cg, func);
-}
-
 /* ====================== Program Code Generation ====================== */
 
-void codegen_program(CodeGen* cg, AST* program)
-{
+void codegen_program(CodeGen* cg, AST* program) {
     if (!program || program->type != N_PROGRAM) return;
 
-    // First pass: register structs and globals
+    // First pass: register structs and collect global info
     for (size_t i = 0; i < program->data.program.global_count; i++) {
         AST* global = program->data.program.globals[i];
+
         if (global->type == N_STRUCT_DECL) {
             codegen_register_struct(cg, global);
         }
         else if (global->type == N_DECL) {
-            if (global->data.decl.array_size && global->data.decl.array_size->type == N_INTLIT) {
-                int arr_size = global->data.decl.array_size->data.int_lit.value;
-                globtab_add_array(&cg->globtab, global->data.decl.name,
-                    global->data.decl.type, global->data.decl.pointer_level, arr_size);
+            int is_array = (global->data.decl.array_size != NULL);
+            int array_size = 0;
+            if (is_array && global->data.decl.array_size->type == N_INTLIT) {
+                array_size = global->data.decl.array_size->data.int_lit.value;
             }
-            else {
-                globtab_add(&cg->globtab, global->data.decl.name,
-                    global->data.decl.type, global->data.decl.pointer_level);
-            }
+            globtab_add(&cg->globtab,
+                global->data.decl.name,
+                global->data.decl.type,
+                global->data.decl.pointer_level,
+                is_array,
+                array_size);
         }
     }
 
+    // Emit prologue
     codegen_baremetal_prologue(cg);
 
+    // Emit functions
     for (size_t i = 0; i < program->data.program.func_count; i++) {
         AST* func = program->data.program.functions[i];
         if (func->data.function.body != NULL) {
@@ -1601,24 +1787,31 @@ void codegen_program(CodeGen* cg, AST* program)
         }
     }
 
+    // Emit runtime support
     codegen_emit_runtime(cg);
     codegen_emit_port_io_runtime(cg);
     codegen_emit_interrupt_runtime(cg);
     codegen_emit_memory_runtime(cg);
 
+    // Emit data section
     emit(cg, "");
     emit(cg, "section .data");
+    emit(cg, "align 4");
+
+    // String literals
     codegen_emit_strings(cg);
 
+    // Global variables
     for (size_t i = 0; i < program->data.program.global_count; i++) {
         AST* global = program->data.program.globals[i];
         if (global->type == N_DECL) {
-            if (global->data.decl.array_size && global->data.decl.array_size->type == N_INTLIT) {
+            if (global->data.decl.array_size &&
+                global->data.decl.array_size->type == N_INTLIT) {
                 int arr_size = global->data.decl.array_size->data.int_lit.value;
                 int elem_size = get_base_type_size(global->data.decl.type);
-                int total_bytes = arr_size * elem_size;
+                int total = arr_size * elem_size;
                 emit(cg, "%s: times %d db 0  ; array[%d]",
-                    global->data.decl.name, total_bytes, arr_size);
+                    global->data.decl.name, total, arr_size);
             }
             else {
                 int init_val = 0;
@@ -1626,11 +1819,9 @@ void codegen_program(CodeGen* cg, AST* program)
                     if (global->data.decl.init_value->type == N_INTLIT) {
                         init_val = global->data.decl.init_value->data.int_lit.value;
                     }
-                    else if (global->data.decl.init_value->type == N_CAST) {
-                        AST* cast_expr = global->data.decl.init_value->data.cast.expr;
-                        if (cast_expr->type == N_INTLIT) {
-                            init_val = cast_expr->data.int_lit.value;
-                        }
+                    else if (global->data.decl.init_value->type == N_CAST &&
+                        global->data.decl.init_value->data.cast.expr->type == N_INTLIT) {
+                        init_val = global->data.decl.init_value->data.cast.expr->data.int_lit.value;
                     }
                 }
                 emit(cg, "%s dd %d", global->data.decl.name, init_val);
@@ -1638,7 +1829,8 @@ void codegen_program(CodeGen* cg, AST* program)
         }
     }
 
+    // Runtime variables
     emit(cg, "vga_cursor dd 0");
     emit(cg, "");
-    emit(cg, "; End of kernel");
+    emit(cg, "; End of generated code");
 }

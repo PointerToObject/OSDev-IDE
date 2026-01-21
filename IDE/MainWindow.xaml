@@ -137,6 +137,57 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <!-- AvalonEdit ScrollBar Styling -->
+        <Style TargetType="{x:Type ScrollBar}" x:Key="AvalonEditScrollBar">
+            <Setter Property="Background" Value="#1E1E1E"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="MinWidth" Value="14"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid Background="#1E1E1E">
+                            <Track x:Name="PART_Track" IsDirectionReversed="True">
+                                <Track.Thumb>
+                                    <Thumb>
+                                        <Thumb.Style>
+                                            <Style TargetType="Thumb">
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Thumb">
+                                                            <Border x:Name="ThumbBorder" 
+                                                                    Background="#424242" 
+                                                                    CornerRadius="7" 
+                                                                    Margin="2"/>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="ThumbBorder" Property="Background" Value="#4E4E4E"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsDragging" Value="True">
+                                                                    <Setter TargetName="ThumbBorder" Property="Background" Value="#5A5A5A"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Thumb.Style>
+                                    </Thumb>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="Orientation" Value="Horizontal">
+                    <Setter Property="Width" Value="Auto"/>
+                    <Setter Property="Height" Value="14"/>
+                    <Setter Property="MinHeight" Value="14"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
 
     <DockPanel Background="{StaticResource VSCBackground}">
@@ -235,7 +286,8 @@
 
                 <Rectangle Width="1" Height="16" Fill="#3F3F46" Margin="8,0"/>
 
-                <Button Background="Transparent" BorderThickness="0" Padding="8,4" Cursor="Hand">
+                <!-- TOOLS BUTTON - Opens Tools (Hex Editor, Disassembler) -->
+                <Button Background="Transparent" BorderThickness="0" Padding="8,4" Cursor="Hand" Click="Tools_Click">
                     <Button.Style>
                         <Style TargetType="Button">
                             <Setter Property="Template">
@@ -255,36 +307,12 @@
                         </Style>
                     </Button.Style>
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="FileDocumentOutline" Foreground="#CCCCCC" Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="View" Foreground="#CCCCCC" FontSize="12" VerticalAlignment="Center" FontFamily="Segoe UI"/>
+                        <materialDesign:PackIcon Kind="Wrench" Foreground="#CCCCCC" Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Tools" Foreground="#CCCCCC" FontSize="12" VerticalAlignment="Center" FontFamily="Segoe UI"/>
                     </StackPanel>
                 </Button>
 
-                <Button Background="Transparent" BorderThickness="0" Padding="8,4" Cursor="Hand" Click="SearchFiles_Click">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="border" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="#3E3E42"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Style>
-                    <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Magnify" Foreground="#CCCCCC" Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Search" Foreground="#CCCCCC" FontSize="12" VerticalAlignment="Center" FontFamily="Segoe UI"/>
-                    </StackPanel>
-                </Button>
-
+                <!-- EXTENSIONS BUTTON - Opens Extensions (Memory Viewer, Bootloader Gen, Ollama) -->
                 <Button Background="Transparent" BorderThickness="0" Padding="8,4" Cursor="Hand" Click="Extensions_Click">
                     <Button.Style>
                         <Style TargetType="Button">
@@ -305,33 +333,8 @@
                         </Style>
                     </Button.Style>
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="ViewGrid" Foreground="#CCCCCC" Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <materialDesign:PackIcon Kind="Puzzle" Foreground="#CCCCCC" Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"/>
                         <TextBlock Text="Extensions" Foreground="#CCCCCC" FontSize="12" VerticalAlignment="Center" FontFamily="Segoe UI"/>
-                    </StackPanel>
-                </Button>
-
-                <Button Background="Transparent" BorderThickness="0" Padding="8,4" Cursor="Hand">
-                    <Button.Style>
-                        <Style TargetType="Button">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="border" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="border" Property="Background" Value="#3E3E42"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </Button.Style>
-                    <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Cog" Foreground="#CCCCCC" Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"/>
-                        <TextBlock Text="Tools" Foreground="#CCCCCC" FontSize="12" VerticalAlignment="Center" FontFamily="Segoe UI"/>
                     </StackPanel>
                 </Button>
             </StackPanel>
@@ -465,7 +468,7 @@
             </Border>
 
             <!-- Tab Bar -->
-            <Border Grid.Row="1" Background="#2D2D30" BorderThickness="0,1,0,1" BorderBrush="#3F3F46" Padding="0,0,0,2">
+            <Border Grid.Row="1" Background="#2D2D30" BorderThickness="0,1,0,1" BorderBrush="#3F3F46" Height="38">
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                     <StackPanel x:Name="TabPanel" Orientation="Horizontal" VerticalAlignment="Center"/>
                 </ScrollViewer>
@@ -481,8 +484,12 @@
                                        ShowLineNumbers="True"
                                        LineNumbersForeground="#858585"
                                        Padding="8,8,0,0"
-                                       VerticalScrollBarVisibility="Hidden"
-                                       HorizontalScrollBarVisibility="Hidden"/>
+                                       VerticalScrollBarVisibility="Visible"
+                                       HorizontalScrollBarVisibility="Auto">
+                    <avalonedit:TextEditor.Resources>
+                        <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource AvalonEditScrollBar}"/>
+                    </avalonedit:TextEditor.Resources>
+                </avalonedit:TextEditor>
             </Border>
 
             <!-- Output Terminal -->
@@ -495,23 +502,118 @@
 
                     <Border Grid.Row="0" Background="#2D2D30" BorderThickness="0,0,0,1" BorderBrush="#3F3F46">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0">
-                            <materialDesign:PackIcon Kind="ConsoleNetwork" Foreground="#858585" Width="14" Height="14" Margin="0,0,6,0"/>
-                            <TextBlock Text="OUTPUT" Foreground="#858585" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" FontFamily="Segoe UI"/>
+                            <RadioButton x:Name="OutputTab" IsChecked="True" GroupName="BottomPanels" Checked="OutputTab_Checked"
+                                         Background="Transparent" Foreground="#858585" BorderThickness="0" Padding="8,6" Cursor="Hand">
+                                <RadioButton.Style>
+                                    <Style TargetType="RadioButton">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="RadioButton">
+                                                    <Border x:Name="border" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="0,0,0,2" BorderBrush="Transparent">
+                                                        <ContentPresenter/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Foreground" Value="#CCCCCC"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                                                            <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </RadioButton.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="ConsoleNetwork" Width="14" Height="14" Margin="0,0,6,0"/>
+                                    <TextBlock Text="OUTPUT" FontSize="11" FontWeight="SemiBold" FontFamily="Segoe UI"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <RadioButton x:Name="TerminalTab" GroupName="BottomPanels" Checked="TerminalTab_Checked" Margin="8,0,0,0"
+                                         Background="Transparent" Foreground="#858585" BorderThickness="0" Padding="8,6" Cursor="Hand">
+                                <RadioButton.Style>
+                                    <Style TargetType="RadioButton">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="RadioButton">
+                                                    <Border x:Name="border" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="0,0,0,2" BorderBrush="Transparent">
+                                                        <ContentPresenter/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Foreground" Value="#CCCCCC"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                                                            <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </RadioButton.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="PowerShell" Width="14" Height="14" Margin="0,0,6,0"/>
+                                    <TextBlock Text="TERMINAL" FontSize="11" FontWeight="SemiBold" FontFamily="Segoe UI"/>
+                                </StackPanel>
+                            </RadioButton>
                         </StackPanel>
                     </Border>
 
-                    <ScrollViewer x:Name="OutputScroller" Grid.Row="1" Style="{StaticResource DarkScrollViewer}" Background="#1E1E1E">
-                        <TextBox x:Name="OutputConsole" IsReadOnly="True"
-                                 Background="Transparent"
-                                 Foreground="#CCCCCC"
-                                 FontFamily="Consolas"
-                                 FontSize="13"
-                                 Padding="12,8"
-                                 BorderThickness="0"
-                                 TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Disabled"
-                                 TextChanged="OutputConsole_TextChanged"/>
-                    </ScrollViewer>
+                    <Grid Grid.Row="1">
+                        <!-- Original Output Panel -->
+                        <ScrollViewer x:Name="OutputScroller" Style="{StaticResource DarkScrollViewer}" Background="#1E1E1E">
+                            <RichTextBox x:Name="OutputConsole" IsReadOnly="True"
+                                     Background="Transparent"
+                                     Foreground="#CCCCCC"
+                                     FontFamily="Consolas"
+                                     FontSize="13"
+                                     Padding="12,8"
+                                     BorderThickness="0"
+                                     VerticalScrollBarVisibility="Disabled"/>
+                        </ScrollViewer>
+
+                        <!-- New Terminal Panel -->
+                        <Grid x:Name="TerminalPanel" Background="#1E1E1E" Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <ScrollViewer Grid.Row="0" Style="{StaticResource DarkScrollViewer}">
+                                <TextBox x:Name="TerminalOutput" IsReadOnly="True"
+                                         Background="Transparent" Foreground="#CCCCCC"
+                                         FontFamily="Consolas" FontSize="13"
+                                         Padding="12,8" BorderThickness="0"
+                                         TextWrapping="Wrap"
+                                         VerticalScrollBarVisibility="Disabled"
+                                         HorizontalScrollBarVisibility="Disabled"/>
+                            </ScrollViewer>
+
+                            <Border Grid.Row="1" Background="#2D2D30" BorderThickness="0,1,0,0" BorderBrush="#3F3F46" Padding="12,8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="PS>" Foreground="#4EC9B0" FontFamily="Consolas" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBox x:Name="TerminalInput" Grid.Column="1"
+                                             Background="Transparent" Foreground="#CCCCCC"
+                                             FontFamily="Consolas" FontSize="13"
+                                             BorderThickness="0" KeyDown="TerminalInput_KeyDown"
+                                             VerticalAlignment="Center"/>
+                                    <Button Grid.Column="2" Content="Clear" Click="ClearTerminal_Click" 
+                                            Style="{StaticResource ModernButton}" Margin="8,0,0,0"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Grid>
                 </Grid>
             </Border>
 
