@@ -3,8 +3,6 @@
 **Integrated Development Environment for OS Development on Windows**  
 A complete IDE for building x86 operating systems with the SubsetC compiler. Build real bootable kernels with a single click.
 
-<img width="250" height="250" alt="image" src="https://github.com/user-attachments/assets/c89ebf09-42e6-419a-9419-18d8ae8259f9" />
-
 
 https://github.com/user-attachments/assets/4548d464-3b96-4cf5-b80a-5081668d0f03
 
