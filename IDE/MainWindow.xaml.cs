@@ -40,63 +40,39 @@ namespace OSDevIDE
 
         private const string BootloaderAsm = @"[org 0x7C00]
 [BITS 16]
-start:
-    mov dx, 0x3F8
-    mov al, 'B'
-    out dx, al
 
+start:
     xor ax, ax
     mov ds, ax
     mov es, ax
     mov ss, ax
     mov sp, 0x7BFE
 
-    mov al, 'S'
-    out dx, al
-    mov al, 'R'
-    out dx, al
-
+    ; Reset disk
     mov ah, 0x00
     mov dl, 0x80
     int 0x13
-    jc reset_fail
-    mov al, 'Z'
-    out dx, al
-    jmp read_sector
+    jc hang
 
-reset_fail:
-    mov al, 'X'
-    out dx, al
-    jmp hang
-
-read_sector:
-    mov ah, 0x02
-    mov al, 8
-    mov ch, 0
+    ; Read kernel in chunks
+    mov bx, 0x1000
     mov cl, 2
+    
+.read_loop:
+    mov ah, 0x02
+    mov al, 8           ; 8 sectors per read
+    mov ch, 0
     mov dh, 0
     mov dl, 0x80
-    mov bx, 0x1000
     int 0x13
-    jc read_fail
-    mov al, 'A'
-    out dx, al
-    jmp success
+    jc hang
+    
+    add bh, 0x10        ; Advance 4KB
+    add cl, 8
+    cmp cl, 42          ; Read 40 sectors (20KB)
+    jb .read_loop
 
-read_fail:
-    mov al, 'E'
-    out dx, al
-    jmp hang
-
-success:
-    mov al, 'L'
-    out dx, al
-    jmp mode_switch
-
-mode_switch:
-    mov ax, 0x3
-    int 0x10
-
+    ; Switch to protected mode
     cli
     lgdt [gdt_desc]
     mov eax, cr0
@@ -105,8 +81,6 @@ mode_switch:
     jmp 0x08:protected_mode
 
 hang:
-    mov al, 'H'
-    out dx, al
     jmp $
 
 [BITS 32]
@@ -116,34 +90,429 @@ protected_mode:
     mov es, ax
     mov ss, ax
     mov esp, 0x90000
-    mov dx, 0x3F8
-    mov al, 'K'
-    out dx, al
     jmp 0x1000
 
 gdt_start:
     dq 0
 gdt_code:
-    dw 0xFFFF
-    dw 0
-    db 0
-    db 10011010b
-    db 11001111b
-    db 0
+    dw 0xFFFF, 0
+    db 0, 10011010b, 11001111b, 0
 gdt_data:
-    dw 0xFFFF
-    dw 0
-    db 0
-    db 10010010b
-    db 11111111b
-    db 0
+    dw 0xFFFF, 0
+    db 0, 10010010b, 11001111b, 0
 gdt_end:
+
 gdt_desc:
     dw gdt_end - gdt_start - 1
     dd gdt_start
 
 times 510 - ($ - $$) db 0
 dw 0xAA55";
+
+        private const string StdlibC = @"// ============================================================
+// SUBSETC STANDARD LIBRARY v1.1
+// Bare-metal x86-32 - No OS dependencies
+// 
+// Uses vga_* prefix to avoid clashing with compiler runtime
+// ============================================================
+
+// ============================================================
+// VGA TEXT MODE
+// ============================================================
+
+int VGA_WIDTH = 80;
+int VGA_HEIGHT = 25;
+int VGA_MEMORY = 0xB8000;
+
+int vga_x = 0;
+int vga_y = 0;
+int vga_attr = 0x0F;
+
+// Color constants
+int COLOR_BLACK = 0;
+int COLOR_BLUE = 1;
+int COLOR_GREEN = 2;
+int COLOR_CYAN = 3;
+int COLOR_RED = 4;
+int COLOR_MAGENTA = 5;
+int COLOR_BROWN = 6;
+int COLOR_LGRAY = 7;
+int COLOR_DGRAY = 8;
+int COLOR_LBLUE = 9;
+int COLOR_LGREEN = 10;
+int COLOR_LCYAN = 11;
+int COLOR_LRED = 12;
+int COLOR_LMAGENTA = 13;
+int COLOR_YELLOW = 14;
+int COLOR_WHITE = 15;
+
+void vga_setcolor(int fg, int bg) {
+    vga_attr = (bg << 4) | fg;
+}
+
+void vga_putc_at(int x, int y, char c) {
+    char* vga = (char*)VGA_MEMORY;
+    int offset = (y * VGA_WIDTH + x) * 2;
+    vga[offset] = c;
+    vga[offset + 1] = vga_attr;
+}
+
+void vga_scroll() {
+    char* vga = (char*)VGA_MEMORY;
+    int i = 0;
+    while (i < VGA_WIDTH * (VGA_HEIGHT - 1) * 2) {
+        vga[i] = vga[i + VGA_WIDTH * 2];
+        i = i + 1;
+    }
+    i = VGA_WIDTH * (VGA_HEIGHT - 1) * 2;
+    while (i < VGA_WIDTH * VGA_HEIGHT * 2) {
+        vga[i] = 32;
+        vga[i + 1] = vga_attr;
+        i = i + 2;
+    }
+}
+
+void vga_putc(char c) {
+    if (c == 10) {
+        vga_x = 0;
+        vga_y = vga_y + 1;
+    } else if (c == 13) {
+        vga_x = 0;
+    } else if (c == 8) {
+        if (vga_x > 0) {
+            vga_x = vga_x - 1;
+            vga_putc_at(vga_x, vga_y, 32);
+        }
+    } else {
+        vga_putc_at(vga_x, vga_y, c);
+        vga_x = vga_x + 1;
+    }
+    if (vga_x >= VGA_WIDTH) {
+        vga_x = 0;
+        vga_y = vga_y + 1;
+    }
+    if (vga_y >= VGA_HEIGHT) {
+        vga_scroll();
+        vga_y = VGA_HEIGHT - 1;
+    }
+}
+
+void vga_clear() {
+    char* vga = (char*)VGA_MEMORY;
+    int i = 0;
+    while (i < VGA_WIDTH * VGA_HEIGHT * 2) {
+        vga[i] = 32;
+        vga[i + 1] = vga_attr;
+        i = i + 2;
+    }
+    vga_x = 0;
+    vga_y = 0;
+}
+
+void vga_setpos(int x, int y) {
+    vga_x = x;
+    vga_y = y;
+}
+
+// ============================================================
+// PRINT FUNCTIONS (using vga_* to avoid runtime clash)
+// ============================================================
+
+void vga_puts(char* str) {
+    int i = 0;
+    while (str[i] != 0) {
+        vga_putc(str[i]);
+        i = i + 1;
+    }
+}
+
+void vga_println(char* str) {
+    vga_puts(str);
+    vga_putc(10);
+}
+
+void vga_putint(int n) {
+    char buf[12];
+    int i = 0;
+    int neg = 0;
+    if (n < 0) { neg = 1; n = 0 - n; }
+    if (n == 0) { vga_putc(48); return; }
+    while (n > 0) {
+        buf[i] = 48 + (n % 10);
+        n = n / 10;
+        i = i + 1;
+    }
+    if (neg) { vga_putc(45); }
+    while (i > 0) { i = i - 1; vga_putc(buf[i]); }
+}
+
+void vga_puthex(int n) {
+    char* hex = ""0123456789ABCDEF"";
+    int i = 28;
+    vga_puts(""0x"");
+    while (i >= 0) {
+        vga_putc(hex[(n >> i) & 0xF]);
+        i = i - 4;
+    }
+}
+
+void vga_newline() {
+    vga_putc(10);
+}
+
+// ============================================================
+// STRING FUNCTIONS
+// ============================================================
+
+int str_len(char* str) {
+    int len = 0;
+    while (str[len] != 0) { len = len + 1; }
+    return len;
+}
+
+int str_cmp(char* s1, char* s2) {
+    int i = 0;
+    while (s1[i] != 0 && s2[i] != 0) {
+        if (s1[i] != s2[i]) { return s1[i] - s2[i]; }
+        i = i + 1;
+    }
+    return s1[i] - s2[i];
+}
+
+int str_ncmp(char* s1, char* s2, int n) {
+    int i = 0;
+    while (i < n && s1[i] != 0 && s2[i] != 0) {
+        if (s1[i] != s2[i]) { return s1[i] - s2[i]; }
+        i = i + 1;
+    }
+    if (i == n) return 0;
+    return s1[i] - s2[i];
+}
+
+void str_cpy(char* dst, char* src) {
+    int i = 0;
+    while (src[i] != 0) { dst[i] = src[i]; i = i + 1; }
+    dst[i] = 0;
+}
+
+void str_ncpy(char* dst, char* src, int n) {
+    int i = 0;
+    while (i < n && src[i] != 0) { dst[i] = src[i]; i = i + 1; }
+    while (i < n) { dst[i] = 0; i = i + 1; }
+}
+
+void str_cat(char* dst, char* src) {
+    int i = str_len(dst);
+    int j = 0;
+    while (src[j] != 0) { dst[i] = src[j]; i = i + 1; j = j + 1; }
+    dst[i] = 0;
+}
+
+// ============================================================
+// MEMORY FUNCTIONS
+// ============================================================
+
+void mem_set(char* dst, char val, int count) {
+    int i = 0;
+    while (i < count) { dst[i] = val; i = i + 1; }
+}
+
+void mem_cpy(char* dst, char* src, int count) {
+    int i = 0;
+    while (i < count) { dst[i] = src[i]; i = i + 1; }
+}
+
+// ============================================================
+// SIMPLE HEAP ALLOCATOR
+// ============================================================
+
+int heap_base = 0x100000;
+int heap_ptr = 0x100000;
+int heap_limit = 0x400000;
+
+char* alloc(int size) {
+    size = (size + 3) & 0xFFFFFFFC;
+    if (heap_ptr + size > heap_limit) { return (char*)0; }
+    char* ptr = (char*)heap_ptr;
+    heap_ptr = heap_ptr + size;
+    return ptr;
+}
+
+void alloc_reset() {
+    heap_ptr = heap_base;
+}
+
+// ============================================================
+// CONVERSION FUNCTIONS
+// ============================================================
+
+int str_to_int(char* str) {
+    int result = 0;
+    int neg = 0;
+    int i = 0;
+    while (str[i] == 32) { i = i + 1; }
+    if (str[i] == 45) { neg = 1; i = i + 1; }
+    else if (str[i] == 43) { i = i + 1; }
+    while (str[i] >= 48 && str[i] <= 57) {
+        result = result * 10 + (str[i] - 48);
+        i = i + 1;
+    }
+    if (neg) { return 0 - result; }
+    return result;
+}
+
+void int_to_str(int n, char* buf) {
+    char tmp[12];
+    int i = 0;
+    int j = 0;
+    int neg = 0;
+    if (n < 0) { neg = 1; n = 0 - n; }
+    if (n == 0) { buf[0] = 48; buf[1] = 0; return; }
+    while (n > 0) { tmp[i] = 48 + (n % 10); n = n / 10; i = i + 1; }
+    if (neg) { buf[j] = 45; j = j + 1; }
+    while (i > 0) { i = i - 1; buf[j] = tmp[i]; j = j + 1; }
+    buf[j] = 0;
+}
+
+// ============================================================
+// KEYBOARD INPUT (PS/2 polling)
+// ============================================================
+
+int KB_DATA = 0x60;
+int KB_STATUS = 0x64;
+
+char kb_map[128];
+int kb_ready = 0;
+
+void kb_init() {
+    int i = 0;
+    while (i < 128) { kb_map[i] = 0; i = i + 1; }
+    
+    // Numbers
+    kb_map[2] = 49; kb_map[3] = 50; kb_map[4] = 51;
+    kb_map[5] = 52; kb_map[6] = 53; kb_map[7] = 54;
+    kb_map[8] = 55; kb_map[9] = 56; kb_map[10] = 57;
+    kb_map[11] = 48;
+    kb_map[12] = 45; kb_map[13] = 61;
+    kb_map[14] = 8;  // Backspace
+    kb_map[15] = 9;  // Tab
+    
+    // QWERTY row
+    kb_map[16] = 113; kb_map[17] = 119; kb_map[18] = 101;
+    kb_map[19] = 114; kb_map[20] = 116; kb_map[21] = 121;
+    kb_map[22] = 117; kb_map[23] = 105; kb_map[24] = 111;
+    kb_map[25] = 112;
+    kb_map[26] = 91; kb_map[27] = 93;
+    kb_map[28] = 10;  // Enter
+    
+    // ASDF row
+    kb_map[30] = 97; kb_map[31] = 115; kb_map[32] = 100;
+    kb_map[33] = 102; kb_map[34] = 103; kb_map[35] = 104;
+    kb_map[36] = 106; kb_map[37] = 107; kb_map[38] = 108;
+    kb_map[39] = 59; kb_map[40] = 39;
+    
+    // ZXCV row
+    kb_map[44] = 122; kb_map[45] = 120; kb_map[46] = 99;
+    kb_map[47] = 118; kb_map[48] = 98; kb_map[49] = 110;
+    kb_map[50] = 109;
+    kb_map[51] = 44; kb_map[52] = 46; kb_map[53] = 47;
+    
+    // Space
+    kb_map[57] = 32;
+    
+    kb_ready = 1;
+}
+
+int kb_haskey() {
+    return inb(KB_STATUS) & 1;
+}
+
+char kb_scancode() {
+    while (kb_haskey() == 0) { }
+    return inb(KB_DATA);
+}
+
+char kb_getc() {
+    if (kb_ready == 0) { kb_init(); }
+    char scan;
+    char ascii;
+    while (1) {
+        scan = kb_scancode();
+        if (scan & 0x80) { continue; }
+        ascii = kb_map[scan & 0x7F];
+        if (ascii != 0) { return ascii; }
+    }
+}
+
+void kb_getline(char* buf, int maxlen) {
+    int i = 0;
+    char c;
+    while (i < maxlen - 1) {
+        c = kb_getc();
+        if (c == 10 || c == 13) { vga_newline(); break; }
+        else if (c == 8) {
+            if (i > 0) { i = i - 1; vga_putc(8); }
+        } else {
+            buf[i] = c;
+            i = i + 1;
+            vga_putc(c);
+        }
+    }
+    buf[i] = 0;
+}
+
+// ============================================================
+// UTILITY FUNCTIONS
+// ============================================================
+
+int util_abs(int n) {
+    if (n < 0) { return 0 - n; }
+    return n;
+}
+
+int util_min(int a, int b) {
+    if (a < b) return a;
+    return b;
+}
+
+int util_max(int a, int b) {
+    if (a > b) return a;
+    return b;
+}
+
+void util_delay(int count) {
+    int i = 0;
+    while (i < count) {
+        int j = 0;
+        while (j < 10000) { j = j + 1; }
+        i = i + 1;
+    }
+}
+
+int rng_seed = 12345;
+
+void rng_srand(int seed) {
+    rng_seed = seed;
+}
+
+int rng_rand() {
+    rng_seed = rng_seed * 1103515245 + 12345;
+    return (rng_seed >> 16) & 0x7FFF;
+}
+
+// ============================================================
+// CHARACTER FUNCTIONS
+// ============================================================
+
+int is_digit(char c) { return c >= 48 && c <= 57; }
+int is_alpha(char c) { return (c >= 65 && c <= 90) || (c >= 97 && c <= 122); }
+int is_alnum(char c) { return is_digit(c) || is_alpha(c); }
+int is_space(char c) { return c == 32 || c == 9 || c == 10 || c == 13; }
+int is_upper(char c) { return c >= 65 && c <= 90; }
+int is_lower(char c) { return c >= 97 && c <= 122; }
+char to_upper(char c) { if (is_lower(c)) { return c - 32; } return c; }
+char to_lower(char c) { if (is_upper(c)) { return c + 32; } return c; }
+";
 
         #region RichTextBox Helpers
 
@@ -1079,13 +1448,43 @@ dw 0xAA55";
             Directory.CreateDirectory(Path.Combine(projectPath, "Bootloader"));
             Directory.CreateDirectory(Path.Combine(projectPath, "build"));
 
+            // Write stdlib.c
+            File.WriteAllText(Path.Combine(projectPath, "Kernel", "stdlib.c"), StdlibC);
+
+            // Write kernel.c with include
             File.WriteAllText(Path.Combine(projectPath, "Kernel", "kernel.c"),
                 @"// kernel.c - OS Dev IDE Template
 // Entry point must be kernel_main()
 
+#include ""stdlib.c""
+
 void kernel_main() {
-    print_fmt(""Hello World!"");
-    while (1) {}
+    // Clear screen with blue background
+    vga_setcolor(COLOR_WHITE, COLOR_BLUE);
+    vga_clear();
+    
+    // Print welcome message
+    vga_println(""==================================="");
+    vga_println(""  Welcome to My Operating System!"");
+    vga_println(""==================================="");
+    vga_newline();
+    
+    vga_puts(""Type something: "");
+    
+    // Read user input
+    char input[64];
+    kb_getline(input, 64);
+    
+    vga_puts(""You typed: "");
+    vga_println(input);
+    
+    vga_newline();
+    vga_println(""System halted."");
+    
+    // Halt
+    while (1) {
+        asm(""hlt"");
+    }
 }");
 
             if (selectedTemplate == "Empty Kernel")
