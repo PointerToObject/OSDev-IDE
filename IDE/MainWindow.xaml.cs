@@ -14,6 +14,7 @@ using ICSharpCode.AvalonEdit.Highlighting.Xshd;
 using System.Xml;
 using MaterialDesignThemes.Wpf;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OSDevIDE
@@ -48,29 +49,31 @@ start:
     mov ss, ax
     mov sp, 0x7BFE
 
-    ; Reset disk
-    mov ah, 0x00
-    mov dl, 0x80
-    int 0x13
-    jc hang
+    ; Print '1' - we started
+    mov ax, 0x0E31
+    int 0x10
 
-    ; Read kernel in chunks
-    mov bx, 0x1000
-    mov cl, 2
-    
-.read_loop:
-    mov ah, 0x02
-    mov al, 8           ; 8 sectors per read
-    mov ch, 0
-    mov dh, 0
+    ; Check LBA extensions available
+    mov ah, 0x41
+    mov bx, 0x55AA
     mov dl, 0x80
     int 0x13
-    jc hang
+    jc .no_lba
     
-    add bh, 0x10        ; Advance 4KB
-    add cl, 8
-    cmp cl, 42          ; Read 40 sectors (20KB)
-    jb .read_loop
+    ; Print '2' - LBA supported
+    mov ax, 0x0E32
+    int 0x10
+
+    ; Load kernel using LBA
+    mov si, dap
+    mov ah, 0x42
+    mov dl, 0x80
+    int 0x13
+    jc .read_fail
+
+    ; Print '3' - read succeeded
+    mov ax, 0x0E33
+    int 0x10
 
     ; Switch to protected mode
     cli
@@ -80,8 +83,31 @@ start:
     mov cr0, eax
     jmp 0x08:protected_mode
 
+.no_lba:
+    mov ax, 0x0E4C  ; 'L' = no LBA
+    int 0x10
+    jmp hang
+
+.read_fail:
+    mov ax, 0x0E52  ; 'R' = read failed
+    int 0x10
+    ; Fall through to hang
+
 hang:
+    mov ax, 0x0E48  ; 'H' = hang
+    int 0x10
     jmp $
+
+; Disk Address Packet
+align 4
+dap:
+    db 0x10         ; Size (16 bytes)
+    db 0            ; Reserved
+    dw 100          ; Sectors to read (~50KB)
+    dw 0x0000       ; Offset
+    dw 0x0800       ; Segment (0x0800:0x0000 = 0x8000 physical)
+    dd 1            ; LBA low (sector 1)
+    dd 0            ; LBA high
 
 [BITS 32]
 protected_mode:
@@ -90,7 +116,12 @@ protected_mode:
     mov es, ax
     mov ss, ax
     mov esp, 0x90000
-    jmp 0x1000
+    
+    ; Write '4' directly to VGA to show we're in PM
+    mov byte [0xB8000], '4'
+    mov byte [0xB8001], 0x0F
+    
+    jmp 0x8000
 
 gdt_start:
     dq 0
@@ -110,7 +141,7 @@ times 510 - ($ - $$) db 0
 dw 0xAA55";
 
         private const string StdlibC = @"// ============================================================
-// SUBSETC STANDARD LIBRARY v1.1
+// SUBSETC STANDARD LIBRARY v2.0
 // Bare-metal x86-32 - No OS dependencies
 // 
 // Uses vga_* prefix to avoid clashing with compiler runtime
@@ -128,7 +159,7 @@ int vga_x = 0;
 int vga_y = 0;
 int vga_attr = 0x0F;
 
-// Color constants
+// Color constants (full names)
 int COLOR_BLACK = 0;
 int COLOR_BLUE = 1;
 int COLOR_GREEN = 2;
@@ -146,6 +177,75 @@ int COLOR_LMAGENTA = 13;
 int COLOR_YELLOW = 14;
 int COLOR_WHITE = 15;
 
+// Color constants (short names for games)
+int BLACK = 0;
+int BLUE = 1;
+int GREEN = 2;
+int CYAN = 3;
+int RED = 4;
+int MAGENTA = 5;
+int BROWN = 6;
+int LGRAY = 7;
+int DGRAY = 8;
+int LBLUE = 9;
+int LGREEN = 10;
+int LCYAN = 11;
+int LRED = 12;
+int LMAGENTA = 13;
+int YELLOW = 14;
+int WHITE = 15;
+
+// ============================================================
+// BOX DRAWING CHARACTERS (CP437)
+// ============================================================
+
+int CH_FULL   = 219;  // █ full block
+int CH_SHADE1 = 176;  // ░ light shade
+int CH_SHADE2 = 177;  // ▒ medium shade
+int CH_SHADE3 = 178;  // ▓ dark shade
+int BOX_H     = 196;  // ─ horizontal
+int BOX_V     = 179;  // │ vertical
+int BOX_TL    = 218;  // ┌ top-left
+int BOX_TR    = 191;  // ┐ top-right
+int BOX_BL    = 192;  // └ bottom-left
+int BOX_BR    = 217;  // ┘ bottom-right
+
+// ============================================================
+// KEYBOARD SCANCODES (PS/2 Set 1)
+// ============================================================
+
+int KEY_ESC   = 1;
+int KEY_1     = 2;
+int KEY_2     = 3;
+int KEY_3     = 4;
+int KEY_4     = 5;
+int KEY_5     = 6;
+int KEY_6     = 7;
+int KEY_7     = 8;
+int KEY_8     = 9;
+int KEY_9     = 10;
+int KEY_0     = 11;
+int KEY_Q     = 16;
+int KEY_W     = 17;
+int KEY_E     = 18;
+int KEY_R     = 19;
+int KEY_T     = 20;
+int KEY_A     = 30;
+int KEY_S     = 31;
+int KEY_D     = 32;
+int KEY_F     = 33;
+int KEY_P     = 25;
+int KEY_ENTER = 28;
+int KEY_SPACE = 57;
+int KEY_UP    = 72;
+int KEY_LEFT  = 75;
+int KEY_RIGHT = 77;
+int KEY_DOWN  = 80;
+
+// ============================================================
+// VGA CORE FUNCTIONS
+// ============================================================
+
 void vga_setcolor(int fg, int bg) {
     vga_attr = (bg << 4) | fg;
 }
@@ -155,6 +255,13 @@ void vga_putc_at(int x, int y, char c) {
     int offset = (y * VGA_WIDTH + x) * 2;
     vga[offset] = c;
     vga[offset + 1] = vga_attr;
+}
+
+void vga_putc_at_attr(int x, int y, char c, int attr) {
+    char* vga = (char*)VGA_MEMORY;
+    int offset = (y * VGA_WIDTH + x) * 2;
+    vga[offset] = c;
+    vga[offset + 1] = attr;
 }
 
 void vga_scroll() {
@@ -212,6 +319,170 @@ void vga_clear() {
 void vga_setpos(int x, int y) {
     vga_x = x;
     vga_y = y;
+}
+
+// ============================================================
+// VGA GAME FUNCTIONS (short names)
+// ============================================================
+
+void vga_put(int x, int y, int c) {
+    vga_putc_at(x, y, c);
+}
+
+void vga_put_color(int x, int y, int c, int fg, int bg) {
+    int attr = (bg << 4) | fg;
+    vga_putc_at_attr(x, y, c, attr);
+}
+
+void vga_printat(int x, int y, char* str) {
+    int i = 0;
+    while (str[i] != 0) {
+        vga_putc_at(x + i, y, str[i]);
+        i = i + 1;
+    }
+}
+
+void vga_printat_color(int x, int y, char* str, int fg, int bg) {
+    int i = 0;
+    int attr = (bg << 4) | fg;
+    while (str[i] != 0) {
+        vga_putc_at_attr(x + i, y, str[i], attr);
+        i = i + 1;
+    }
+}
+
+void vga_center(int y, char* str) {
+    int len = 0;
+    int x;
+    while (str[len] != 0) { len = len + 1; }
+    x = (VGA_WIDTH - len) / 2;
+    vga_printat(x, y, str);
+}
+
+void vga_int(int n) {
+    vga_putint(n);
+}
+
+void vga_int_at(int x, int y, int n) {
+    char buf[12];
+    int i = 11;
+    int neg = 0;
+    int digit;
+    
+    buf[11] = 0;
+    
+    if (n == 0) {
+        vga_putc_at(x, y, 48);
+        return;
+    }
+    
+    if (n < 0) {
+        neg = 1;
+        n = 0 - n;
+    }
+    
+    while (n > 0) {
+        i = i - 1;
+        digit = n % 10;
+        buf[i] = 48 + digit;
+        n = n / 10;
+    }
+    
+    if (neg) {
+        i = i - 1;
+        buf[i] = 45;
+    }
+    
+    vga_printat(x, y, &buf[i]);
+}
+
+void cur_hide() {
+    outb(0x3D4, 0x0A);
+    outb(0x3D5, 0x20);
+}
+
+void cur_show() {
+    outb(0x3D4, 0x0A);
+    outb(0x3D5, 0x0E);
+    outb(0x3D4, 0x0B);
+    outb(0x3D5, 0x0F);
+}
+
+// ============================================================
+// DRAWING FUNCTIONS
+// ============================================================
+
+void draw_box(int x, int y, int w, int h) {
+    int i;
+    
+    vga_put(x, y, BOX_TL);
+    i = 1;
+    while (i < w - 1) {
+        vga_put(x + i, y, BOX_H);
+        i = i + 1;
+    }
+    vga_put(x + w - 1, y, BOX_TR);
+    
+    i = 1;
+    while (i < h - 1) {
+        vga_put(x, y + i, BOX_V);
+        vga_put(x + w - 1, y + i, BOX_V);
+        i = i + 1;
+    }
+    
+    vga_put(x, y + h - 1, BOX_BL);
+    i = 1;
+    while (i < w - 1) {
+        vga_put(x + i, y + h - 1, BOX_H);
+        i = i + 1;
+    }
+    vga_put(x + w - 1, y + h - 1, BOX_BR);
+}
+
+void draw_fill(int x, int y, int w, int h, int c) {
+    int i;
+    int j;
+    
+    j = 0;
+    while (j < h) {
+        i = 0;
+        while (i < w) {
+            vga_put(x + i, y + j, c);
+            i = i + 1;
+        }
+        j = j + 1;
+    }
+}
+
+void draw_fill_color(int x, int y, int w, int h, int c, int fg, int bg) {
+    int i;
+    int j;
+    
+    j = 0;
+    while (j < h) {
+        i = 0;
+        while (i < w) {
+            vga_put_color(x + i, y + j, c, fg, bg);
+            i = i + 1;
+        }
+        j = j + 1;
+    }
+}
+
+void draw_shadow(int x, int y, int w, int h) {
+    int i;
+    
+    i = 1;
+    while (i < h) {
+        vga_put_color(x + w, y + i, 32, BLACK, BLACK);
+        i = i + 1;
+    }
+    
+    i = 1;
+    while (i <= w) {
+        vga_put_color(x + i, y + h, 32, BLACK, BLACK);
+        i = i + 1;
+    }
 }
 
 // ============================================================
@@ -382,7 +653,7 @@ int KB_DATA = 0x60;
 int KB_STATUS = 0x64;
 
 char kb_map[128];
-int kb_ready = 0;
+int kb_inited = 0;
 
 void kb_init() {
     int i = 0;
@@ -420,7 +691,7 @@ void kb_init() {
     // Space
     kb_map[57] = 32;
     
-    kb_ready = 1;
+    kb_inited = 1;
 }
 
 int kb_haskey() {
@@ -433,7 +704,7 @@ char kb_scancode() {
 }
 
 char kb_getc() {
-    if (kb_ready == 0) { kb_init(); }
+    if (kb_inited == 0) { kb_init(); }
     char scan;
     char ascii;
     while (1) {
@@ -442,6 +713,39 @@ char kb_getc() {
         ascii = kb_map[scan & 0x7F];
         if (ascii != 0) { return ascii; }
     }
+}
+
+// Non-blocking scan - returns 0 if no key
+int kb_scan() {
+    if ((inb(KB_STATUS) & 1) == 0) {
+        return 0;
+    }
+    int key = inb(KB_DATA);
+    if (key & 0x80) return 0;  // Ignore key releases
+    return key;
+}
+
+// Flush keyboard buffer (clears stale data from boot)
+void kb_flush() {
+    while (inb(KB_STATUS) & 1) {
+        inb(KB_DATA);
+    }
+}
+
+// Blocking wait for key press (ignores releases)
+int kb_wait() {
+    int key;
+    kb_flush();       // Clear any stale scancodes
+    delay(100);       // Let QEMU focus events settle
+    kb_flush();       // Flush again
+    while (1) {
+        while ((inb(KB_STATUS) & 1) == 0) { }
+        key = inb(KB_DATA);
+        if ((key & 0x80) == 0) {
+            return key;
+        }
+    }
+    return 0;
 }
 
 void kb_getline(char* buf, int maxlen) {
@@ -462,6 +766,114 @@ void kb_getline(char* buf, int maxlen) {
 }
 
 // ============================================================
+// TIMING / DELAY
+// ============================================================
+
+void delay(int ms) {
+    int i = 0;
+    while (i < ms) {
+        int j = 0;
+        while (j < 5000) { j = j + 1; }
+        i = i + 1;
+    }
+}
+
+void util_delay(int count) {
+    delay(count);
+}
+
+// ============================================================
+// RANDOM NUMBER GENERATOR
+// ============================================================
+
+int rand_seed = 12345;
+
+void srand(int seed) {
+    rand_seed = seed;
+}
+
+void rng_srand(int seed) {
+    rand_seed = seed;
+}
+
+int rand() {
+    rand_seed = rand_seed * 1103515245 + 12345;
+    return (rand_seed >> 16) & 0x7FFF;
+}
+
+int rng_rand() {
+    return rand();
+}
+
+int randint(int min, int max) {
+    int range = max - min + 1;
+    int r = rand() % range;
+    return min + r;
+}
+
+// ============================================================
+// SOUND (PC Speaker via PIT)
+// ============================================================
+
+void speaker_on() {
+    int tmp = inb(0x61);
+    if ((tmp & 3) != 3) {
+        outb(0x61, tmp | 3);
+    }
+}
+
+void speaker_off() {
+    int tmp = inb(0x61);
+    outb(0x61, tmp & 0xFC);
+}
+
+void play_tone(int freq, int duration) {
+    int divisor;
+    
+    if (freq == 0) {
+        delay(duration);
+        return;
+    }
+    
+    divisor = 1193180 / freq;
+    
+    outb(0x43, 0xB6);
+    outb(0x42, divisor & 0xFF);
+    outb(0x42, divisor >> 8);
+    
+    speaker_on();
+    delay(duration);
+    speaker_off();
+}
+
+void snd_click() {
+    play_tone(1000, 10);
+}
+
+void snd_drop() {
+    play_tone(200, 30);
+}
+
+void snd_clear() {
+    play_tone(880, 50);
+    play_tone(988, 50);
+    play_tone(1047, 100);
+}
+
+void snd_levelup() {
+    play_tone(523, 50);
+    play_tone(659, 50);
+    play_tone(784, 50);
+    play_tone(1047, 100);
+}
+
+void snd_gameover() {
+    play_tone(392, 200);
+    play_tone(330, 200);
+    play_tone(262, 400);
+}
+
+// ============================================================
 // UTILITY FUNCTIONS
 // ============================================================
 
@@ -478,26 +890,6 @@ int util_min(int a, int b) {
 int util_max(int a, int b) {
     if (a > b) return a;
     return b;
-}
-
-void util_delay(int count) {
-    int i = 0;
-    while (i < count) {
-        int j = 0;
-        while (j < 10000) { j = j + 1; }
-        i = i + 1;
-    }
-}
-
-int rng_seed = 12345;
-
-void rng_srand(int seed) {
-    rng_seed = seed;
-}
-
-int rng_rand() {
-    rng_seed = rng_seed * 1103515245 + 12345;
-    return (rng_seed >> 16) & 0x7FFF;
 }
 
 // ============================================================
@@ -1067,7 +1459,7 @@ char to_lower(char c) { if (is_upper(c)) { return c + 32; } return c; }
             {
                 Title = "Extensions",
                 Width = 450,
-                Height = 400,
+                Height = 450,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Owner = this,
                 Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2D2D30")),
@@ -1092,6 +1484,47 @@ char to_lower(char c) { if (is_upper(c)) { return c + 32; } return c; }
 
             var stack = new StackPanel { Margin = new Thickness(0, 0, 0, 20) };
 
+            // Ollama AI - WORKING
+            var ollamaBtn = new Button
+            {
+                Content = "✨ Ollama AI Assistant",
+                Height = 50,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#007ACC")),
+                Foreground = Brushes.White,
+                BorderThickness = new Thickness(0),
+                FontSize = 14,
+                FontWeight = FontWeights.SemiBold,
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 0, 10),
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(15, 0, 0, 0)
+            };
+            ollamaBtn.Click += (s, args) => { dialog.Close(); OpenOllamaWindow(); };
+
+            // Bootloader Generator
+            var bootGenBtn = new Button
+            {
+                Content = "⚙️ Bootloader Generator",
+                Height = 45,
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3E3E42")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCCCCC")),
+                BorderThickness = new Thickness(0),
+                FontSize = 14,
+                Cursor = Cursors.Hand,
+                Margin = new Thickness(0, 0, 0, 10),
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(15, 0, 0, 0)
+            };
+            bootGenBtn.Click += (s, args) => {
+                dialog.Close();
+                var bootGen = new BootloaderGenerator(projectPath, (filepath) => {
+                    RefreshExplorer();
+                    OpenFile(filepath);
+                });
+                bootGen.Owner = this;
+                bootGen.Show();
+            };
+
             // Memory Viewer (placeholder)
             var memViewBtn = new Button
             {
@@ -1099,7 +1532,7 @@ char to_lower(char c) { if (is_upper(c)) { return c + 32; } return c; }
                 Height = 45,
                 Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3E3E42")),
                 Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#858585")),
-                BorderThickness = new Thickness(0, 0, 0, 0),
+                BorderThickness = new Thickness(0),
                 FontSize = 14,
                 Cursor = Cursors.Hand,
                 Margin = new Thickness(0, 0, 0, 10),
@@ -1108,35 +1541,19 @@ char to_lower(char c) { if (is_upper(c)) { return c + 32; } return c; }
             };
             memViewBtn.Click += (s, args) => { ShowDarkMessageBox("Memory Viewer - Coming Soon!", "OS Dev IDE"); };
 
-            // Bootloader Generator
-            var bootGenBtn = new Button
+            var infoText = new TextBlock
             {
-                Content = "🚀 Bootloader Generator",
-                Height = 45,
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3E3E42")),
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#858585")),
-                BorderThickness = new Thickness(0, 0, 0, 0),
-                FontSize = 14,
-                Cursor = Cursors.Hand,
-                Margin = new Thickness(0, 0, 0, 10),
-                HorizontalContentAlignment = HorizontalAlignment.Left,
-                Padding = new Thickness(15, 0, 0, 0)
-            };
-            bootGenBtn.Click += (s, args) => { ShowDarkMessageBox("Bootloader Generator - Coming Soon!", "OS Dev IDE"); };
-
-            var ollamaInfo = new TextBlock
-            {
-                Text = "🤖 Ollama AI integration coming soon!",
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#858585")),
+                Text = "Ollama AI knows everything about x86, bootloaders, your compiler, debugging...",
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#888888")),
                 FontSize = 11,
-                FontStyle = FontStyles.Italic,
                 TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 20, 0, 0)
+                Margin = new Thickness(0, 15, 0, 0)
             };
 
-            stack.Children.Add(memViewBtn);
+            stack.Children.Add(ollamaBtn);
             stack.Children.Add(bootGenBtn);
-            stack.Children.Add(ollamaInfo);
+            stack.Children.Add(memViewBtn);
+            stack.Children.Add(infoText);
             Grid.SetRow(stack, 1);
 
             var closeBtn = new Button
@@ -1146,12 +1563,12 @@ char to_lower(char c) { if (is_upper(c)) { return c + 32; } return c; }
                 Height = 32,
                 Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3E3E42")),
                 Foreground = Brushes.White,
-                BorderThickness = new Thickness(0, 0, 0, 0),
+                BorderThickness = new Thickness(0),
                 FontSize = 13,
                 Cursor = Cursors.Hand,
                 HorizontalAlignment = HorizontalAlignment.Right
             };
-            closeBtn.Click += (s, e) => dialog.Close();
+            closeBtn.Click += (s, ev) => dialog.Close();
             Grid.SetRow(closeBtn, 2);
 
             grid.Children.Add(title);
@@ -1449,7 +1866,7 @@ char to_lower(char c) { if (is_upper(c)) { return c + 32; } return c; }
             Directory.CreateDirectory(Path.Combine(projectPath, "build"));
 
             // Write stdlib.c
-            File.WriteAllText(Path.Combine(projectPath, "Kernel", "stdlib.c"), StdlibC);
+            File.WriteAllText(Path.Combine(projectPath, "Kernel", "stdlib.c"), StdlibC, new System.Text.UTF8Encoding(false));
 
             // Write kernel.c with include
             File.WriteAllText(Path.Combine(projectPath, "Kernel", "kernel.c"),
@@ -1542,7 +1959,7 @@ void kernel_main() {
                     return;
                 }
 
-                File.WriteAllText(newFile, "");
+                File.WriteAllText(newFile, "", new System.Text.UTF8Encoding(false));
                 RefreshFileTree();
                 LoadFile(newFile);
                 StatusText.Text = $"Created: {fileName}";
@@ -2729,7 +3146,7 @@ void kernel_main() {
                                 string newFile = Path.Combine(path, fileName);
                                 if (!File.Exists(newFile))
                                 {
-                                    File.WriteAllText(newFile, "");
+                                    File.WriteAllText(newFile, "", new System.Text.UTF8Encoding(false));
                                     RefreshFileTree();
                                     LoadFile(newFile);
                                     StatusText.Text = $"Created: {fileName}";
@@ -3315,6 +3732,24 @@ or in an unsupported format.
             string kernelAsm = Path.Combine(kernelDir, "kernel.asm");
             AppendOutput($"[1/4] Compiling kernel.c to assembly...\n");
 
+            // Strip BOM from all .c files before compilation
+            string[] cFiles = Directory.GetFiles(kernelDir, "*.c");
+            foreach (string cFile in cFiles)
+            {
+                try
+                {
+                    string content = File.ReadAllText(cFile);
+                    // Remove BOM if present
+                    if (content.Length > 0 && (content[0] == '\uFEFF' || content[0] == '\ufeff'))
+                    {
+                        content = content.Substring(1);
+                    }
+                    // Write back without BOM
+                    File.WriteAllText(cFile, content, new System.Text.UTF8Encoding(false));
+                }
+                catch { /* Ignore errors */ }
+            }
+
             Process compilerProc = new Process
             {
                 StartInfo = new ProcessStartInfo
@@ -3413,22 +3848,18 @@ or in an unsupported format.
 
         private void OutputTab_Checked(object sender, RoutedEventArgs e)
         {
-            if (OutputScroller != null && TerminalPanel != null)
-            {
-                OutputScroller.Visibility = Visibility.Visible;
-                TerminalPanel.Visibility = Visibility.Collapsed;
-            }
+            if (OutputScroller != null) OutputScroller.Visibility = Visibility.Visible;
+            if (TerminalPanel != null) TerminalPanel.Visibility = Visibility.Collapsed;
+            if (OllamaPanel != null) OllamaPanel.Visibility = Visibility.Collapsed;
         }
 
         private void TerminalTab_Checked(object sender, RoutedEventArgs e)
         {
-            if (OutputScroller != null && TerminalPanel != null)
-            {
-                OutputScroller.Visibility = Visibility.Collapsed;
-                TerminalPanel.Visibility = Visibility.Visible;
-                if (TerminalOutput.Text == "") TerminalOutput.Text = "PowerShell Terminal Ready\nType a command and press Enter...\n\n";
-                TerminalInput.Focus();
-            }
+            if (OutputScroller != null) OutputScroller.Visibility = Visibility.Collapsed;
+            if (TerminalPanel != null) TerminalPanel.Visibility = Visibility.Visible;
+            if (OllamaPanel != null) OllamaPanel.Visibility = Visibility.Collapsed;
+            if (TerminalOutput.Text == "") TerminalOutput.Text = "PowerShell Terminal Ready\nType a command and press Enter...\n\n";
+            TerminalInput.Focus();
         }
 
         private async void TerminalInput_KeyDown(object sender, KeyEventArgs e)
@@ -3490,6 +3921,126 @@ or in an unsupported format.
         {
             TerminalOutput.Clear();
             TerminalOutput.Text = "PowerShell Terminal\n\n";
+        }
+
+        #endregion
+
+        #region Ollama AI (Opens Floating Window)
+
+        private OllamaWindow _ollamaWindow = null;
+
+        /// <summary>
+        /// Opens the Ollama AI window from Extensions menu
+        /// </summary>
+        private void OpenOllama_Click(object sender, RoutedEventArgs e)
+        {
+            OpenOllamaWindow();
+        }
+
+        private void OllamaTab_Checked(object sender, RoutedEventArgs e)
+        {
+            if (OutputScroller != null) OutputScroller.Visibility = Visibility.Collapsed;
+            if (TerminalPanel != null) TerminalPanel.Visibility = Visibility.Collapsed;
+            if (OllamaPanel != null) OllamaPanel.Visibility = Visibility.Visible;
+        }
+
+        private void OllamaOpenWindow_Click(object sender, RoutedEventArgs e)
+        {
+            OpenOllamaWindow();
+        }
+
+        private void OllamaQuick_Game(object sender, RoutedEventArgs e)
+        {
+            OpenOllamaWindow();
+            // The window will handle the rest
+        }
+
+        private void OllamaQuick_OS(object sender, RoutedEventArgs e)
+        {
+            OpenOllamaWindow();
+        }
+
+        private void OllamaQuick_Fix(object sender, RoutedEventArgs e)
+        {
+            OpenOllamaWindow();
+        }
+
+        private void OllamaQuick_Explain(object sender, RoutedEventArgs e)
+        {
+            OpenOllamaWindow();
+        }
+
+        private void OpenOllamaWindow()
+        {
+            if (_ollamaWindow != null && _ollamaWindow.IsLoaded)
+            {
+                _ollamaWindow.Activate();
+                _ollamaWindow.Focus();
+                return;
+            }
+
+            _ollamaWindow = new OllamaWindow(
+                getEditorCode: () => CodeEditor?.Text,
+                getEditorFile: () => currentFile,
+                getBuildOutput: () => new TextRange(OutputConsole.Document.ContentStart, OutputConsole.Document.ContentEnd).Text,
+                writeFile: (filename, code) =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        if (!string.IsNullOrEmpty(projectPath))
+                        {
+                            string filepath = System.IO.Path.Combine(projectPath, filename);
+                            try
+                            {
+                                // Write UTF-8 WITHOUT BOM to avoid tokenization errors
+                                System.IO.File.WriteAllText(filepath, code, new System.Text.UTF8Encoding(false));
+                                RefreshExplorer();
+                                OpenFile(filepath);
+                            }
+                            catch (Exception ex)
+                            {
+                                MessageBox.Show($"Error writing file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                            }
+                        }
+                        else
+                        {
+                            CodeEditor.Text = code;
+                        }
+                    });
+                },
+                setEditorCode: (code) => Dispatcher.Invoke(() => CodeEditor.Text = code)
+            );
+
+            _ollamaWindow.Closed += (s, args) => _ollamaWindow = null;
+            _ollamaWindow.Show();
+        }
+
+        #endregion
+
+        #region Wrapper Methods for Compatibility
+
+        /// <summary>
+        /// Wrapper for RefreshFileTree - used by extensions
+        /// </summary>
+        private void RefreshExplorer()
+        {
+            RefreshFileTree();
+        }
+
+        /// <summary>
+        /// Wrapper for LoadFile - used by extensions
+        /// </summary>
+        private void OpenFile(string filepath)
+        {
+            LoadFile(filepath);
+        }
+
+        /// <summary>
+        /// Shows the AI/Ollama panel
+        /// </summary>
+        private void AIShow_Click(object sender, RoutedEventArgs e)
+        {
+            OpenOllamaWindow();
         }
 
         #endregion
