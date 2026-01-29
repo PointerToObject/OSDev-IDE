@@ -559,7 +559,7 @@ static void emit_store_sized(CodeGen* cg, int element_size, const char* dest_reg
 static void codegen_baremetal_prologue(CodeGen* cg) {
     emit(cg, "[BITS 32]");
     emit(cg, "");
-    emit(cg, "[org 0x1000]");
+    emit(cg, "[org 0x8000]");
     emit(cg, "");
     emit(cg, "section .text");
     emit(cg, "global _start");
@@ -1700,6 +1700,45 @@ void codegen_statement(CodeGen* cg, AST* stmt) {
 
 /* ====================== Function Code Generation ====================== */
 
+static int is_runtime_function(const char* name) {
+    // VGA functions (runtime provides these)
+    if (strcmp(name, "print_char") == 0) return 1;
+    if (strcmp(name, "print_string") == 0) return 1;
+    if (strcmp(name, "print_hex") == 0) return 1;
+    if (strcmp(name, "print_int") == 0) return 1;
+    if (strcmp(name, "set_cursor") == 0) return 1;
+    if (strcmp(name, "get_cursor") == 0) return 1;
+    if (strcmp(name, "newline") == 0) return 1;
+    if (strcmp(name, "clear_screen") == 0) return 1;
+
+    // Port I/O
+    if (strcmp(name, "outb") == 0) return 1;
+    if (strcmp(name, "inb") == 0) return 1;
+    if (strcmp(name, "outw") == 0) return 1;
+    if (strcmp(name, "inw") == 0) return 1;
+    if (strcmp(name, "outl") == 0) return 1;
+    if (strcmp(name, "inl") == 0) return 1;
+
+    // Interrupt control
+    if (strcmp(name, "disable_interrupts") == 0) return 1;
+    if (strcmp(name, "enable_interrupts") == 0) return 1;
+    if (strcmp(name, "cli_func") == 0) return 1;
+    if (strcmp(name, "sti_func") == 0) return 1;
+    if (strcmp(name, "halt") == 0) return 1;
+    if (strcmp(name, "read_cr0") == 0) return 1;
+    if (strcmp(name, "write_cr0") == 0) return 1;
+    if (strcmp(name, "read_cr3") == 0) return 1;
+    if (strcmp(name, "write_cr3") == 0) return 1;
+
+    // Memory operations
+    if (strcmp(name, "memcpy") == 0) return 1;
+    if (strcmp(name, "memset") == 0) return 1;
+    if (strcmp(name, "memcmp") == 0) return 1;
+
+    return 0;
+}
+
+
 void codegen_function(CodeGen* cg, AST* func) {
     codegen_function_correct(cg, func);
 }
@@ -1707,6 +1746,11 @@ void codegen_function(CodeGen* cg, AST* func) {
 void codegen_function_correct(CodeGen* cg, AST* func) {
     if (!func || func->type != N_FUNCTION) return;
     if (!func->data.function.body) return;  // Forward declaration
+
+    // ADD THESE 4 LINES:
+    if (is_runtime_function(func->data.function.name)) {
+        return;  // Skip runtime functions
+    }
 
     // Set global for struct lookup in symtab_add_typed
     g_current_cg = cg;
