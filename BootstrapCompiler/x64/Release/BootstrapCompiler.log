@@ -1,0 +1,16 @@
+﻿  Codegen.c
+  Main.c
+  Parser.c
+  Tokenizer.c
+C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\BootstrapCompiler\Tokenizer\Scanner\Tokenizer.c(171,18): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\BootstrapCompiler\Tokenizer\Scanner\Tokenizer.c(178,25): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\BootstrapCompiler\Tokenizer\Scanner\Tokenizer.c(189,18): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\BootstrapCompiler\Tokenizer\Scanner\Tokenizer.c(218,29): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\BootstrapCompiler\Tokenizer\Scanner\Tokenizer.c(233,18): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\BootstrapCompiler\Tokenizer\Scanner\Tokenizer.c(248,25): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+  Generating code
+  66 of 160 functions (41.2%) were compiled, the rest were copied from previous compilation.
+    4 functions were new in current compilation
+    8 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  BootstrapCompiler.vcxproj -> C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\x64\Release\Compiler-x86_32.exe
