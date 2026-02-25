@@ -1,0 +1,1 @@
+C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\IDE\obj\Release\net8.0-windows\OSDev-IDE.csproj.AssemblyReference.cache
