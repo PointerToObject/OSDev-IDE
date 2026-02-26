@@ -1,13 +1,7 @@
 <div align="center">
 
-```
- ██████╗ ███████╗██████╗ ███████╗██╗   ██╗    ██╗██████╗ ███████╗
-██╔═══██╗██╔════╝██╔══██╗██╔════╝██║   ██║    ██║██╔══██╗██╔════╝
-██║   ██║███████╗██║  ██║█████╗  ██║   ██║    ██║██║  ██║█████╗  
-██║   ██║╚════██║██║  ██║██╔══╝  ╚██╗ ██╔╝    ██║██║  ██║██╔══╝  
-╚██████╔╝███████║██████╔╝███████╗ ╚████╔╝     ██║██████╔╝███████╗
- ╚═════╝ ╚══════╝╚═════╝ ╚══════╝  ╚═══╝      ╚═╝╚═════╝ ╚══════╝
-```
+![OSDEVICO](https://github.com/user-attachments/assets/5f4e521e-ef49-411e-a729-93fce4048634)
+
 
 **A full-stack IDE for building x86 operating systems from scratch on Windows.**  
 Write bare-metal kernels in SubsetC. Compile. Assemble. Boot. All from one window.
