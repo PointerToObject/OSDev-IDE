@@ -62,7 +62,8 @@ namespace OSDevIDE
             {
                 if (!char.IsLetterOrDigit(e.Text[0]) && e.Text[0] != '_')
                 {
-                    _window.CompletionList.RequestInsertion(e);
+                    // Just close the popup — only Tab commits
+                    _window.Close();
                 }
             }
         }
@@ -131,6 +132,22 @@ namespace OSDevIDE
 
             _window = new CompletionWindow(_editor.TextArea);
             _window.StartOffset -= prefix.Length;
+
+            // TAB-ONLY commit: Enter dismisses popup (eaten), only Tab inserts
+            _window.PreviewKeyDown += (s, ev) =>
+            {
+                if (ev.Key == System.Windows.Input.Key.Enter || ev.Key == System.Windows.Input.Key.Return)
+                {
+                    _window.Close();
+                    ev.Handled = true; // Eat Enter — no newline
+                }
+                else if (ev.Key == System.Windows.Input.Key.Escape)
+                {
+                    _window.Close();
+                    ev.Handled = true;
+                }
+            };
+
             ApplyDarkTheme(_window);
 
             var data = _window.CompletionList.CompletionData;
@@ -215,6 +232,16 @@ namespace OSDevIDE
             {
                 KillWhiteBorders(window);
             };
+
+            // Override ToolTip style globally for this window — the description popup
+            var tooltipStyle = new System.Windows.Style(typeof(System.Windows.Controls.ToolTip));
+            tooltipStyle.Setters.Add(new System.Windows.Setter(System.Windows.Controls.Control.BackgroundProperty,
+                new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1E, 0x1E, 0x1E))));
+            tooltipStyle.Setters.Add(new System.Windows.Setter(System.Windows.Controls.Control.ForegroundProperty, fg));
+            tooltipStyle.Setters.Add(new System.Windows.Setter(System.Windows.Controls.Control.BorderBrushProperty, borderColor));
+            tooltipStyle.Setters.Add(new System.Windows.Setter(System.Windows.Controls.Control.BorderThicknessProperty, new System.Windows.Thickness(1)));
+            tooltipStyle.Setters.Add(new System.Windows.Setter(System.Windows.Controls.Control.PaddingProperty, new System.Windows.Thickness(6, 4, 6, 4)));
+            window.Resources[typeof(System.Windows.Controls.ToolTip)] = tooltipStyle;
         }
 
         /// <summary>
@@ -295,6 +322,22 @@ namespace OSDevIDE
                 if (members.Count == 0) return;
 
                 _window = new CompletionWindow(_editor.TextArea);
+
+                // TAB-ONLY commit for member completions too
+                _window.PreviewKeyDown += (s2, ev) =>
+                {
+                    if (ev.Key == System.Windows.Input.Key.Enter || ev.Key == System.Windows.Input.Key.Return)
+                    {
+                        _window.Close();
+                        ev.Handled = true;
+                    }
+                    else if (ev.Key == System.Windows.Input.Key.Escape)
+                    {
+                        _window.Close();
+                        ev.Handled = true;
+                    }
+                };
+
                 ApplyDarkTheme(_window);
                 var data = _window.CompletionList.CompletionData;
                 foreach (var m in members)
@@ -446,6 +489,23 @@ namespace OSDevIDE
                         Description = $"{memberType} {memberName}" +
                                       (mm.Groups[3].Success ? $"[{mm.Groups[3].Value}]" : ""),
                         Category = "member"
+                    });
+                }
+
+                // Parse function pointer members: rettype (*name)(params)
+                var fpMatches = Regex.Matches(members,
+                    @"(\w+)\s*\(\s*\*\s*(\w+)\s*\)\s*\(([^)]*)\)\s*;");
+                foreach (Match fm in fpMatches)
+                {
+                    string retType = fm.Groups[1].Value.Trim();
+                    string fpName = fm.Groups[2].Value.Trim();
+                    string fpParams = fm.Groups[3].Value.Trim();
+                    memberList.Add(new CompletionEntry
+                    {
+                        Text = fpName,
+                        Description = $"{retType} (*{fpName})({fpParams})  — function pointer",
+                        Category = "member",
+                        InsertText = fpName
                     });
                 }
 

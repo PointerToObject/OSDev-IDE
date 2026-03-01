@@ -1650,11 +1650,16 @@ void sort(int* arr, int count) {
 
                 // Color based on content
                 string lower = line.ToLower();
-                if (lower.Contains("error") || lower.Contains("failed") || lower.Contains("✗") || lower.Contains("[!]"))
+                bool hasRealError = lower.Contains("✗") || lower.Contains("[!]") || lower.Contains("failed") ||
+                    System.Text.RegularExpressions.Regex.IsMatch(lower, @"(?<![_a-z])error(?![_a-z])");
+                bool hasRealWarning = lower.Contains("⚠") ||
+                    System.Text.RegularExpressions.Regex.IsMatch(lower, @"(?<![_a-z])warning(?![_a-z])");
+
+                if (hasRealError)
                 {
                     run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F44747")); // Red
                 }
-                else if (lower.Contains("warning") || lower.Contains("⚠"))
+                else if (hasRealWarning)
                 {
                     run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCA700")); // Yellow
                 }
@@ -1662,13 +1667,13 @@ void sort(int* arr, int count) {
                 {
                     run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#4EC9B0")); // Green
                 }
-                else if (line.StartsWith("╔") || line.StartsWith("║") || line.StartsWith("╚"))
+                else if (line.StartsWith("━") || line.StartsWith("╔") || line.StartsWith("║") || line.StartsWith("╚"))
                 {
-                    run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#569CD6")); // Blue for boxes
+                    run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#569CD6")); // Blue for headers
                 }
-                else if (lower.Contains("[*]") || lower.Contains("[cc]") || lower.Contains("[asm]") || lower.Contains("[img]") || lower.Contains("[run]") || lower.Contains("linking"))
+                else if (lower.Contains("[cc]") || lower.Contains("[asm]") || lower.Contains("[img]") || lower.Contains("[run]"))
                 {
-                    run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#9CDCFE")); // Light blue for info
+                    run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#9CDCFE")); // Light blue for steps
                 }
                 else if (line.TrimStart().StartsWith("Generated:") || line.TrimStart().StartsWith("kernel.bin:") || line.TrimStart().StartsWith("bootloader.bin:") || line.TrimStart().StartsWith("os-image.bin:") || line.TrimStart().StartsWith("Build time:"))
                 {
@@ -1676,7 +1681,7 @@ void sort(int* arr, int count) {
                 }
                 else
                 {
-                    run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCCCCC")); // Gray default
+                    run.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#CCCCCC")); // Default
                 }
 
                 paragraph.Inlines.Add(run);
@@ -2377,9 +2382,13 @@ void sort(int* arr, int count) {
     <Color name=""Type"" foreground=""#4EC9B0"" />
     <Color name=""Number"" foreground=""#B5CEA8"" />
     <Color name=""Preprocessor"" foreground=""#9B9B9B"" />
+    <Color name=""PreprocessorKeyword"" foreground=""#C586C0"" />
     <Color name=""Function"" foreground=""#DCDCAA"" />
     <Color name=""Operator"" foreground=""#D4D4D4"" />
     <Color name=""Punctuation"" foreground=""#D4D4D4"" />
+    <Color name=""Member"" foreground=""#9CDCFE"" />
+    <Color name=""Macro"" foreground=""#4EC9B0"" />
+    <Color name=""Constant"" foreground=""#4FC1FF"" />
     
     <RuleSet>
         <!-- Comments -->
@@ -2405,9 +2414,28 @@ void sort(int* arr, int count) {
         </Span>
         
         <!-- Preprocessor directives -->
-        <Span color=""Preprocessor"" begin=""^\s*#"" end=""$"" />
+        <Span color=""Preprocessor"" begin=""^\s*#"" end=""$"">
+            <RuleSet>
+                <Keywords color=""PreprocessorKeyword"">
+                    <Word>include</Word>
+                    <Word>define</Word>
+                    <Word>ifdef</Word>
+                    <Word>ifndef</Word>
+                    <Word>endif</Word>
+                    <Word>if</Word>
+                    <Word>else</Word>
+                    <Word>elif</Word>
+                    <Word>undef</Word>
+                    <Word>pragma</Word>
+                </Keywords>
+                <Span color=""String"">
+                    <Begin>""</Begin>
+                    <End>""</End>
+                </Span>
+            </RuleSet>
+        </Span>
         
-        <!-- Control flow keywords (purple in VS) -->
+        <!-- Control flow keywords (purple — VS Code style) -->
         <Keywords color=""ControlFlow"">
             <Word>if</Word>
             <Word>else</Word>
@@ -2423,7 +2451,7 @@ void sort(int* arr, int count) {
             <Word>goto</Word>
         </Keywords>
         
-        <!-- Storage and modifier keywords (blue in VS) -->
+        <!-- Storage and modifier keywords (blue) -->
         <Keywords color=""Keyword"">
             <Word>inline</Word>
             <Word>static</Word>
@@ -2439,8 +2467,8 @@ void sort(int* arr, int count) {
             <Word>__attribute__</Word>
         </Keywords>
         
-        <!-- Type keywords (teal in VS) -->
-        <Keywords color=""Type"">
+        <!-- Built-in type keywords (blue like VS Code) -->
+        <Keywords color=""Keyword"">
             <Word>void</Word>
             <Word>char</Word>
             <Word>short</Word>
@@ -2450,17 +2478,40 @@ void sort(int* arr, int count) {
             <Word>double</Word>
             <Word>signed</Word>
             <Word>unsigned</Word>
+        </Keywords>
+
+        <!-- struct/union/enum keywords (teal) -->
+        <Keywords color=""Type"">
             <Word>struct</Word>
             <Word>union</Word>
             <Word>enum</Word>
         </Keywords>
-        
-        <!-- Numbers (hex and decimal) -->
-        <Rule color=""Number"">
-            \b0[xX][0-9a-fA-F]+\b|\b\d+\b
+
+        <!-- Common C constants (bright blue) -->
+        <Keywords color=""Constant"">
+            <Word>NULL</Word>
+            <Word>true</Word>
+            <Word>false</Word>
+            <Word>TRUE</Word>
+            <Word>FALSE</Word>
+        </Keywords>
+
+        <!-- ALL_CAPS identifiers = macros/constants (teal) -->
+        <Rule color=""Macro"">
+            \b[A-Z][A-Z0-9_]{2,}\b
         </Rule>
         
-        <!-- Function calls (yellow in VS) -->
+        <!-- Member access: thing->member or thing.member (light blue) -->
+        <Rule color=""Member"">
+            (?&lt;=[\.\-]&gt;?)[a-zA-Z_]\w*
+        </Rule>
+
+        <!-- Numbers (hex, binary, decimal) -->
+        <Rule color=""Number"">
+            \b0[xX][0-9a-fA-F]+\b|\b0[bB][01]+\b|\b\d+\b
+        </Rule>
+        
+        <!-- Function calls (yellow) -->
         <Rule color=""Function"">
             \b[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()
         </Rule>
@@ -3398,44 +3449,34 @@ void kernel_main() {
                     int offset = Convert.ToInt32(offsetInput.Text, 16);
                     byte[] fileBytes = File.ReadAllBytes(filePath);
 
-                    // Disassemble to assembly view
+                    // Use the real x86 disassembler
+                    var disasm = new x86Disassembler(fileBytes, 0);
+                    var lines = disasm.DisassembleRange(offset, Math.Min(fileBytes.Length - offset, 2048));
+
+                    // Assembly view — clean monospace columns
                     var asmBuilder = new System.Text.StringBuilder();
-                    asmBuilder.AppendLine("╔═══════════════════════════════════════════════════════════════╗");
-                    asmBuilder.AppendLine("║                    ASSEMBLY VIEW                              ║");
-                    asmBuilder.AppendLine("╚═══════════════════════════════════════════════════════════════╝");
-                    asmBuilder.AppendLine();
-
-                    int pos = offset;
-                    var instructions = new List<DisassembledInstruction>();
-
-                    while (pos < fileBytes.Length && pos < offset + 512)
+                    foreach (var line in lines)
                     {
-                        var instr = DisassembleInstructionDetailed(fileBytes, ref pos);
-                        instructions.Add(instr);
-                        asmBuilder.AppendLine(instr.FormattedLine);
+                        asmBuilder.AppendLine(line.Format());
                     }
-
                     asmText.Text = asmBuilder.ToString();
 
-                    // Generate pseudo-code
+                    // Pseudo-code view
                     var pseudoBuilder = new System.Text.StringBuilder();
-                    pseudoBuilder.AppendLine("╔═══════════════════════════════════════════════════════════════╗");
-                    pseudoBuilder.AppendLine("║                   PSEUDO-CODE VIEW                            ║");
-                    pseudoBuilder.AppendLine("╚═══════════════════════════════════════════════════════════════╝");
+                    pseudoBuilder.AppendLine($"// Disassembly of {Path.GetFileName(filePath)} at offset 0x{offset:X}");
+                    pseudoBuilder.AppendLine($"// {lines.Count} instructions decoded");
                     pseudoBuilder.AppendLine();
-                    pseudoBuilder.AppendLine("void function_" + offset.ToString("X") + "() {");
-                    pseudoBuilder.AppendLine();
+                    pseudoBuilder.AppendLine($"void sub_{offset:X8}() {{");
 
-                    GenerateImprovedPseudoCode(instructions, pseudoBuilder);
+                    GeneratePseudoCode(lines, pseudoBuilder);
 
                     pseudoBuilder.AppendLine("}");
-
                     pseudoText.Text = pseudoBuilder.ToString();
                 }
                 catch (Exception ex)
                 {
-                    asmText.Text = $"Error disassembling: {ex.Message}";
-                    pseudoText.Text = "// Unable to generate pseudo-code";
+                    asmText.Text = $"// Error: {ex.Message}";
+                    pseudoText.Text = $"// Error: {ex.Message}";
                 }
             };
 
@@ -3450,219 +3491,187 @@ void kernel_main() {
             disasmWindow.ShowDialog();
         }
 
-        private class DisassembledInstruction
+        private void GeneratePseudoCode(List<DisasmLine> instructions, System.Text.StringBuilder sb)
         {
-            public int Address { get; set; }
-            public string BytesHex { get; set; }
-            public string Mnemonic { get; set; }
-            public string Operands { get; set; }
-            public string FormattedLine { get; set; }
-        }
-
-        private DisassembledInstruction DisassembleInstructionDetailed(byte[] bytes, ref int pos)
-        {
-            int startPos = pos;
-            if (pos >= bytes.Length)
-                return new DisassembledInstruction { Address = startPos, FormattedLine = "" };
-
-            byte opcode = bytes[pos++];
-            string bytesStr = $"{opcode:X2}";
-            string mnemonic = "";
-            string operands = "";
-
-            // x86 disassembly with color coding
-            switch (opcode)
-            {
-                case 0x90: mnemonic = "nop"; break;
-                case 0xC3: mnemonic = "ret"; break;
-                case 0xCC: mnemonic = "int3"; break;
-                case 0xF4: mnemonic = "hlt"; break;
-                case 0xFA: mnemonic = "cli"; break;
-                case 0xFB: mnemonic = "sti"; break;
-                case 0x50:
-                case 0x51:
-                case 0x52:
-                case 0x53:
-                case 0x54:
-                case 0x55:
-                case 0x56:
-                case 0x57:
-                    mnemonic = "push";
-                    operands = new[] { "ax", "cx", "dx", "bx", "sp", "bp", "si", "di" }[opcode - 0x50];
-                    break;
-                case 0x58:
-                case 0x59:
-                case 0x5A:
-                case 0x5B:
-                case 0x5C:
-                case 0x5D:
-                case 0x5E:
-                case 0x5F:
-                    mnemonic = "pop";
-                    operands = new[] { "ax", "cx", "dx", "bx", "sp", "bp", "si", "di" }[opcode - 0x58];
-                    break;
-
-                case 0xB0:
-                case 0xB1:
-                case 0xB2:
-                case 0xB3:
-                case 0xB4:
-                case 0xB5:
-                case 0xB6:
-                case 0xB7:
-                    if (pos < bytes.Length)
-                    {
-                        byte val = bytes[pos++];
-                        bytesStr += $" {val:X2}";
-                        mnemonic = "mov";
-                        operands = $"{(char)('a' + (opcode - 0xB0))}l, 0x{val:X2}";
-                    }
-                    break;
-
-                case 0xB8:
-                case 0xB9:
-                case 0xBA:
-                case 0xBB:
-                case 0xBC:
-                case 0xBD:
-                case 0xBE:
-                case 0xBF:
-                    if (pos + 1 < bytes.Length)
-                    {
-                        ushort val = (ushort)(bytes[pos] | (bytes[pos + 1] << 8));
-                        bytesStr += $" {bytes[pos]:X2} {bytes[pos + 1]:X2}";
-                        pos += 2;
-                        mnemonic = "mov";
-                        string[] regs = { "ax", "cx", "dx", "bx", "sp", "bp", "si", "di" };
-                        operands = $"{regs[opcode - 0xB8]}, 0x{val:X4}";
-                    }
-                    break;
-
-                case 0xE8:
-                    if (pos + 1 < bytes.Length)
-                    {
-                        short offset = (short)(bytes[pos] | (bytes[pos + 1] << 8));
-                        bytesStr += $" {bytes[pos]:X2} {bytes[pos + 1]:X2}";
-                        pos += 2;
-                        mnemonic = "call";
-                        operands = $"0x{startPos + 3 + offset:X}";
-                    }
-                    break;
-
-                case 0xE9:
-                    if (pos + 1 < bytes.Length)
-                    {
-                        short offset = (short)(bytes[pos] | (bytes[pos + 1] << 8));
-                        bytesStr += $" {bytes[pos]:X2} {bytes[pos + 1]:X2}";
-                        pos += 2;
-                        mnemonic = "jmp";
-                        operands = $"0x{startPos + 3 + offset:X}";
-                    }
-                    break;
-
-                case 0x74: // jz
-                case 0x75: // jnz
-                case 0x7C: // jl
-                case 0x7D: // jge
-                case 0x7E: // jle
-                case 0x7F: // jg
-                    if (pos < bytes.Length)
-                    {
-                        sbyte offset = (sbyte)bytes[pos++];
-                        bytesStr += $" {(byte)offset:X2}";
-                        mnemonic = opcode == 0x74 ? "jz" : opcode == 0x75 ? "jnz" :
-                                   opcode == 0x7C ? "jl" : opcode == 0x7D ? "jge" :
-                                   opcode == 0x7E ? "jle" : "jg";
-                        operands = $"0x{startPos + 2 + offset:X}";
-                    }
-                    break;
-
-                case 0xCD:
-                    if (pos < bytes.Length)
-                    {
-                        byte intNum = bytes[pos++];
-                        bytesStr += $" {intNum:X2}";
-                        mnemonic = "int";
-                        operands = $"0x{intNum:X2}";
-                    }
-                    break;
-
-                default:
-                    // Skip unrecognized bytes
-                    return new DisassembledInstruction { Address = startPos, FormattedLine = "" };
-            }
-
-            string formatted = $"0x{startPos:X8}  {bytesStr,-18} {mnemonic,-8} {operands}";
-
-            return new DisassembledInstruction
-            {
-                Address = startPos,
-                BytesHex = bytesStr,
-                Mnemonic = mnemonic,
-                Operands = operands,
-                FormattedLine = formatted
-            };
-        }
-
-        private void GenerateImprovedPseudoCode(List<DisassembledInstruction> instructions, System.Text.StringBuilder sb)
-        {
-            int indent = 1;
-            string ind() => new string(' ', indent * 4);
+            string ind = "    ";
+            string[] regs32 = { "eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi" };
 
             foreach (var instr in instructions)
             {
-                switch (instr.Mnemonic)
+                string m = instr.Mnemonic.ToLower().Trim();
+                string ops = instr.Operands.Trim();
+
+                // Skip noise
+                if (m == "nop" || m == "push" || m == "pop" || m == "db" || string.IsNullOrEmpty(m))
+                    continue;
+
+                if (m == "mov")
                 {
-                    case "mov":
-                        sb.AppendLine($"{ind()}{instr.Operands.Replace(", ", " = ")};");
-                        break;
-
-                    case "push":
-                    case "pop":
-                    case "nop":
-                        // Skip completely
-                        break;
-
-                    case "call":
-                        sb.AppendLine($"{ind()}function_{instr.Operands.Replace("0x", "")}();");
-                        break;
-
-                    case "jmp":
-                        sb.AppendLine($"{ind()}goto loc_{instr.Operands.Replace("0x", "")};");
-                        break;
-
-                    case "jz":
-                    case "jnz":
-                    case "jl":
-                    case "jle":
-                    case "jg":
-                    case "jge":
-                        sb.AppendLine($"{ind()}if (condition_{instr.Mnemonic}) goto loc_{instr.Operands.Replace("0x", "")};");
-                        break;
-
-                    case "ret":
-                        sb.AppendLine($"{ind()}return;");
-                        break;
-
-                    case "int":
-                        sb.AppendLine($"{ind()}interrupt({instr.Operands});");
-                        break;
-
-                    case "cli":
-                        sb.AppendLine($"{ind()}disable_interrupts();");
-                        break;
-
-                    case "sti":
-                        sb.AppendLine($"{ind()}enable_interrupts();");
-                        break;
-
-                    case "hlt":
-                        sb.AppendLine($"{ind()}halt();");
-                        break;
-
-                    default:
-                        sb.AppendLine($"{ind()}// {instr.Mnemonic} {instr.Operands}");
-                        break;
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} = {parts[1].Trim()};");
+                }
+                else if (m == "add")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} += {parts[1].Trim()};");
+                }
+                else if (m == "sub")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} -= {parts[1].Trim()};");
+                }
+                else if (m == "xor")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                    {
+                        if (parts[0].Trim() == parts[1].Trim())
+                            sb.AppendLine($"{ind}{parts[0].Trim()} = 0;");
+                        else
+                            sb.AppendLine($"{ind}{parts[0].Trim()} ^= {parts[1].Trim()};");
+                    }
+                }
+                else if (m == "and")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} &= {parts[1].Trim()};");
+                }
+                else if (m == "or")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} |= {parts[1].Trim()};");
+                }
+                else if (m == "shl" || m == "sal")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} <<= {parts[1].Trim()};");
+                }
+                else if (m == "shr" || m == "sar")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} >>= {parts[1].Trim()};");
+                }
+                else if (m == "not")
+                {
+                    sb.AppendLine($"{ind}{ops} = ~{ops};");
+                }
+                else if (m == "neg")
+                {
+                    sb.AppendLine($"{ind}{ops} = -{ops};");
+                }
+                else if (m == "inc")
+                {
+                    sb.AppendLine($"{ind}{ops}++;");
+                }
+                else if (m == "dec")
+                {
+                    sb.AppendLine($"{ind}{ops}--;");
+                }
+                else if (m == "lea")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} = &{parts[1].Trim()};");
+                }
+                else if (m == "cmp" || m == "test")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}// {m} {parts[0].Trim()}, {parts[1].Trim()}");
+                }
+                else if (m == "call")
+                {
+                    sb.AppendLine($"{ind}{ops}();");
+                }
+                else if (m == "ret")
+                {
+                    sb.AppendLine($"{ind}return;");
+                }
+                else if (m == "jmp")
+                {
+                    sb.AppendLine($"{ind}goto {ops};");
+                }
+                else if (m.StartsWith("j"))
+                {
+                    // Conditional jumps
+                    string cond = m switch
+                    {
+                        "je" or "jz" => "==",
+                        "jne" or "jnz" => "!=",
+                        "jl" or "jnge" => "<",
+                        "jle" or "jng" => "<=",
+                        "jg" or "jnle" => ">",
+                        "jge" or "jnl" => ">=",
+                        "jb" or "jnae" => "< (unsigned)",
+                        "jbe" or "jna" => "<= (unsigned)",
+                        "ja" or "jnbe" => "> (unsigned)",
+                        "jae" or "jnb" => ">= (unsigned)",
+                        "js" => "sign",
+                        "jns" => "!sign",
+                        _ => m.Substring(1)
+                    };
+                    sb.AppendLine($"{ind}if ({cond}) goto {ops};");
+                }
+                else if (m == "int")
+                {
+                    sb.AppendLine($"{ind}interrupt({ops});");
+                }
+                else if (m == "cli")
+                {
+                    sb.AppendLine($"{ind}disable_interrupts();");
+                }
+                else if (m == "sti")
+                {
+                    sb.AppendLine($"{ind}enable_interrupts();");
+                }
+                else if (m == "hlt")
+                {
+                    sb.AppendLine($"{ind}halt();");
+                }
+                else if (m == "out")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}outb({parts[0].Trim()}, {parts[1].Trim()});");
+                }
+                else if (m == "in")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} = inb({parts[1].Trim()});");
+                }
+                else if (m == "movzx")
+                {
+                    var parts = ops.Split(new[] { ", " }, 2, StringSplitOptions.None);
+                    if (parts.Length == 2)
+                        sb.AppendLine($"{ind}{parts[0].Trim()} = (unsigned){parts[1].Trim()};");
+                }
+                else if (m == "imul" || m == "mul")
+                {
+                    sb.AppendLine($"{ind}eax *= {ops};");
+                }
+                else if (m == "idiv" || m == "div")
+                {
+                    sb.AppendLine($"{ind}eax /= {ops}; edx = eax % {ops};");
+                }
+                else if (m == "cdq")
+                {
+                    sb.AppendLine($"{ind}edx = (eax < 0) ? -1 : 0; // sign-extend");
+                }
+                else
+                {
+                    // Anything we don't know — show as asm comment
+                    if (!string.IsNullOrEmpty(ops))
+                        sb.AppendLine($"{ind}asm(\"{m} {ops}\");");
+                    else
+                        sb.AppendLine($"{ind}asm(\"{m}\");");
                 }
             }
         }
@@ -4529,11 +4538,8 @@ or in an unsupported format.
         {
             var buildStart = DateTime.Now;
 
-            AppendOutput("╔═══════════════════════════════════════════════════════╗\n");
-            AppendOutput("║              SubsetC OS Build System                  ║\n");
-            AppendOutput("╚═══════════════════════════════════════════════════════╝\n");
-            AppendOutput($"  Started: {buildStart:HH:mm:ss}\n");
-            AppendOutput($"  Project: {Path.GetFileName(projectPath)}\n\n");
+            AppendOutput("━━━ SubsetC Build ━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+            AppendOutput($"  {buildStart:HH:mm:ss}  {Path.GetFileName(projectPath)}\n\n");
 
             string kernelDir = Path.Combine(projectPath, "Kernel");
             string bootDir = Path.Combine(projectPath, "Bootloader");
@@ -4551,6 +4557,11 @@ or in an unsupported format.
 
             // ── Step 1: Compile C → Assembly ──
             string kernelAsm = Path.Combine(kernelDir, "kernel.asm");
+
+            // Delete stale .asm so we don't show misleading stats on failure
+            if (File.Exists(kernelAsm))
+                File.Delete(kernelAsm);
+
             AppendOutput("[CC]  kernel.c → kernel.asm\n");
 
             // Strip BOM from all .c files before compilation
@@ -4585,43 +4596,53 @@ or in an unsupported format.
             string compErr = await compilerProc.StandardError.ReadToEndAsync();
             await compilerProc.WaitForExitAsync();
 
-            // Filter compiler output — show errors/warnings prominently, hide verbose token/AST dumps
+            // Filter compiler output — only show REAL errors/warnings, not function names containing 'error'
+            bool IsRealError(string line)
+            {
+                string lower = line.ToLower().Trim();
+                // Real errors: "error:", "error at", "Error token:", "error on line", "COMPILATION FAILED"
+                // NOT: "snd_error", "error_handler", "FUNCTION void snd_error"
+                if (lower.Contains("error:") || lower.Contains("error at") || lower.Contains("error token") ||
+                    lower.StartsWith("error") || lower.Contains("failed") ||
+                    System.Text.RegularExpressions.Regex.IsMatch(lower, @"(?<![_a-z])error(?![_a-z])"))
+                    return true;
+                return false;
+            }
+
+            bool IsRealWarning(string line)
+            {
+                string lower = line.ToLower().Trim();
+                if (lower.Contains("warning:") || lower.StartsWith("warning") ||
+                    System.Text.RegularExpressions.Regex.IsMatch(lower, @"(?<![_a-z])warning(?![_a-z])"))
+                    return true;
+                return false;
+            }
+
             if (!string.IsNullOrWhiteSpace(compErr))
             {
                 foreach (var line in compErr.Split('\n'))
                 {
                     string trimmed = line.Trim();
                     if (string.IsNullOrEmpty(trimmed)) continue;
-                    if (trimmed.ToLower().Contains("error"))
+                    if (IsRealError(trimmed))
                         AppendOutput($"      ✗ {trimmed}\n");
-                    else if (trimmed.ToLower().Contains("warning"))
+                    else if (IsRealWarning(trimmed))
                         AppendOutput($"      ⚠ {trimmed}\n");
-                    else
-                        AppendOutput($"      {trimmed}\n");
+                    // Skip everything else (FUNCTION, labels, verbose dumps)
                 }
             }
 
-            // Show summary of compiler stdout (token/AST/codegen info) — compact
+            // Show only real errors/warnings from stdout
             if (!string.IsNullOrWhiteSpace(compOut))
             {
-                var lines = compOut.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToArray();
-                int errorCount = lines.Count(l => l.ToLower().Contains("error"));
-                int warnCount = lines.Count(l => l.ToLower().Contains("warning"));
-
-                // Show errors/warnings from stdout too
-                foreach (var line in lines)
+                foreach (var line in compOut.Split('\n'))
                 {
                     string trimmed = line.Trim();
-                    if (trimmed.ToLower().Contains("error") || trimmed.ToLower().Contains("warning"))
-                        AppendOutput($"      {trimmed}\n");
-                }
-
-                // Count generated lines as a metric
-                if (File.Exists(kernelAsm))
-                {
-                    long asmSize = new FileInfo(kernelAsm).Length;
-                    int asmLines = File.ReadAllLines(kernelAsm).Length;
-                    AppendOutput($"      Generated: {asmLines:N0} lines, {asmSize:N0} bytes\n");
+                    if (string.IsNullOrEmpty(trimmed)) continue;
+                    if (IsRealError(trimmed))
+                        AppendOutput($"      ✗ {trimmed}\n");
+                    else if (IsRealWarning(trimmed))
+                        AppendOutput($"      ⚠ {trimmed}\n");
                 }
             }
 
@@ -4632,6 +4653,13 @@ or in an unsupported format.
                 return;
             }
 
+            // Show generated stats on success
+            if (File.Exists(kernelAsm))
+            {
+                long asmSize = new FileInfo(kernelAsm).Length;
+                int asmLines = File.ReadAllLines(kernelAsm).Length;
+                AppendOutput($"      Generated: {asmLines:N0} lines, {asmSize:N0} bytes\n");
+            }
             AppendOutput("[+]  kernel.asm generated ✓\n\n");
 
             // ── Step 2: Assemble with NASM ──
@@ -4684,13 +4712,20 @@ or in an unsupported format.
 
             wslProc.OutputDataReceived += (s, a) =>
             {
-                if (a.Data != null)
+                // Only show NASM errors, QEMU output, or genuinely useful info
+                if (a.Data != null && !string.IsNullOrWhiteSpace(a.Data))
                     Dispatcher.Invoke(() => AppendOutput("      " + a.Data + "\n"));
             };
             wslProc.ErrorDataReceived += (s, a) =>
             {
-                if (a.Data != null)
-                    Dispatcher.Invoke(() => AppendOutput("      " + a.Data + "\n"));
+                // Only show real errors from NASM/WSL, filter noise
+                if (a.Data != null && !string.IsNullOrWhiteSpace(a.Data))
+                {
+                    string line = a.Data.Trim();
+                    // Show NASM errors (file:line: error:), skip dd/cp noise
+                    if (line.Contains("error") || line.Contains("warning") || line.Contains("fatal"))
+                        Dispatcher.Invoke(() => AppendOutput("      ✗ " + line + "\n"));
+                }
             };
 
             wslProc.Start();
@@ -4707,9 +4742,7 @@ or in an unsupported format.
                 string kernelBin = Path.Combine(kernelDir, "kernel.bin");
                 string bootBin = Path.Combine(bootDir, "bootloader.bin");
 
-                AppendOutput("\n╔═══════════════════════════════════════════════════════╗\n");
-                AppendOutput("║                ✓ BUILD SUCCESSFUL                     ║\n");
-                AppendOutput("╚═══════════════════════════════════════════════════════╝\n");
+                AppendOutput("\n━━━ ✓ BUILD SUCCESSFUL ━━━━━━━━━━━━━━━━━━━━━━━\n");
 
                 if (File.Exists(kernelBin))
                     AppendOutput($"  kernel.bin:     {new FileInfo(kernelBin).Length:N0} bytes ({new FileInfo(kernelBin).Length / 512} sectors)\n");
