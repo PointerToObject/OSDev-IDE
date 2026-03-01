@@ -222,6 +222,7 @@ AST* create_decl_node(char* type, char* name, int pointer_level, AST* init, AST*
     node->data.decl.is_unsigned = 0;
     node->data.decl.is_register = 0;
     node->data.decl.is_packed = 0;
+    node->data.decl.is_function_pointer = 0;
     return node;
 }
 
@@ -392,6 +393,16 @@ AST* create_do_while_node(AST* body, AST* condition)
     node->type = N_DO_WHILE;
     node->data.do_while_stmt.body = body;
     node->data.do_while_stmt.condition = condition;
+    return node;
+}
+
+AST* create_func_ptr_call_node(AST* callee, AST** args, size_t arg_count)
+{
+    AST* node = (AST*)malloc(sizeof(AST));
+    node->type = N_FUNC_PTR_CALL;
+    node->data.func_ptr_call.callee = callee;
+    node->data.func_ptr_call.args = args;
+    node->data.func_ptr_call.arg_count = arg_count;
     return node;
 }
 
@@ -612,10 +623,8 @@ AST* parse_postfix(Parser* p)
             }
             else
             {
-                for (size_t i = 0; i < arg_count; i++) ast_free(args[i]);
-                free(args);
-                fprintf(stderr, "Function pointer calls not supported\n");
-                exit(1);
+                // Function pointer call: expr(args) where expr is member access, deref, etc.
+                expr = create_func_ptr_call_node(expr, args, arg_count);
             }
         }
         else if (t.type == TOKEN_LBRACKET)
@@ -921,6 +930,36 @@ AST* parse_declaration(Parser* p)
     int ptr_level = 0;
     while (match_token(p, TOKEN_STAR)) ptr_level++;
 
+    // Detect function pointer: type (*name)(params)
+    if (check_token(p, TOKEN_LPAREN) && peek_ahead(p, 1).type == TOKEN_STAR)
+    {
+        expect(p, TOKEN_LPAREN);   // (
+        expect(p, TOKEN_STAR);     // *
+        Token fp_name = expect(p, TOKEN_IDENTIFIER);
+        char* fp_name_str = _strdup(fp_name.word);
+        expect(p, TOKEN_RPAREN);   // )
+        expect(p, TOKEN_LPAREN);   // (
+        // Skip parameter types — at x86-32 level it's just a 4-byte address
+        int depth = 1;
+        while (depth > 0 && peek_token(p).type != TOKEN_EOF) {
+            if (check_token(p, TOKEN_LPAREN)) depth++;
+            else if (check_token(p, TOKEN_RPAREN)) depth--;
+            if (depth > 0) advance_token(p);
+        }
+        expect(p, TOKEN_RPAREN);   // )
+        expect(p, TOKEN_SEMICOLON);
+
+        AST* node = create_decl_node(type_str, fp_name_str, 1, NULL, NULL);
+        node->data.decl.is_function_pointer = 1;
+        node->data.decl.is_static = is_static;
+        node->data.decl.is_extern = is_extern;
+        node->data.decl.is_volatile = is_volatile;
+        node->data.decl.is_const = is_const;
+        node->data.decl.is_unsigned = is_unsigned;
+        node->data.decl.is_register = is_register;
+        return node;
+    }
+
     Token name_tok = expect(p, TOKEN_IDENTIFIER);
     char* name_str = _strdup(name_tok.word);
 
@@ -1111,7 +1150,7 @@ AST* parse_switch_statement(Parser* p)
         }
         else
         {
-            // Stray statement outside case/default — skip it
+            // Stray statement outside case/default ? skip it
             parse_statement(p);
         }
     }
@@ -1657,6 +1696,12 @@ void ast_free(AST* node)
     case N_DO_WHILE:
         ast_free(node->data.do_while_stmt.body);
         ast_free(node->data.do_while_stmt.condition);
+        break;
+    case N_FUNC_PTR_CALL:
+        ast_free(node->data.func_ptr_call.callee);
+        for (size_t i = 0; i < node->data.func_ptr_call.arg_count; i++)
+            ast_free(node->data.func_ptr_call.args[i]);
+        free(node->data.func_ptr_call.args);
         break;
     case N_PROGRAM:
         for (size_t i = 0; i < node->data.program.func_count; i++)

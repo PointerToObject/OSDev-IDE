@@ -43,7 +43,8 @@ typedef enum
 	N_TERNARY,
 	N_ASM,  // NEW: Inline assembly
 	N_SWITCH,
-	N_DO_WHILE
+	N_DO_WHILE,
+	N_FUNC_PTR_CALL  // Function pointer call: expr(args)
 } Nodes;
 
 typedef struct
@@ -126,6 +127,7 @@ typedef struct
 	int is_unsigned;
 	int is_register;
 	int is_packed;
+	int is_function_pointer;
 } DeclNode;
 
 typedef struct
@@ -231,6 +233,14 @@ typedef struct
 	AST* condition;
 } DoWhileNode;
 
+// Function pointer call: callee_expr(args)
+typedef struct
+{
+	AST* callee;       // Expression that evaluates to function address
+	AST** args;
+	size_t arg_count;
+} FuncPtrCallNode;
+
 typedef struct
 {
 	AST** functions;
@@ -273,6 +283,7 @@ typedef struct AST
 		AsmNode asm_stmt;  // NEW
 		SwitchNode switch_stmt;
 		DoWhileNode do_while_stmt;
+		FuncPtrCallNode func_ptr_call;
 	} data;
 } AST;
 
@@ -312,6 +323,7 @@ AST* create_program_node();
 AST* create_asm_node(char* code, int is_volatile);  // NEW
 AST* create_switch_node(AST* expression, AST** case_values, AST** case_bodies, size_t case_count, AST* default_body);
 AST* create_do_while_node(AST* body, AST* condition);
+AST* create_func_ptr_call_node(AST* callee, AST** args, size_t arg_count);
 
 void block_add_statement(AST* block, AST* stmt);
 void program_add_function(AST* program, AST* func);

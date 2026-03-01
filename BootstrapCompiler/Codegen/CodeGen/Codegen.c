@@ -5,6 +5,33 @@
 #define MAX_LOCALS 256
 #define MAX_GLOBALS 256
 #define MAX_LOOP_DEPTH 32
+#define MAX_FUNC_NAMES 512
+
+/* ====================== Function Name Table ====================== */
+/* Tracks known function names so we can emit their ADDRESS when used as values */
+
+static char* g_func_names[MAX_FUNC_NAMES];
+static int g_func_name_count = 0;
+
+static void func_table_reset() { g_func_name_count = 0; }
+
+static void func_table_add(const char* name) {
+    if (g_func_name_count >= MAX_FUNC_NAMES) return;
+    // Don't add duplicates
+    for (int i = 0; i < g_func_name_count; i++) {
+        if (strcmp(g_func_names[i], name) == 0) return;
+    }
+    g_func_names[g_func_name_count++] = _strdup(name);
+}
+
+static int is_known_function(const char* name) {
+    for (int i = 0; i < g_func_name_count; i++) {
+        if (strcmp(g_func_names[i], name) == 0) return 1;
+    }
+    return 0;
+}
+
+/* ====================== Symbol Table (Locals) ====================== */
 
 typedef struct {
     char* name;
@@ -1087,6 +1114,15 @@ void codegen_expression(CodeGen* cg, AST* expr) {
                 emit(cg, "    mov eax, %s  ; Address of global array",
                     expr->data.ident.name);
             }
+            else if (gv) {
+                emit(cg, "    mov eax, [%s]  ; Global %s",
+                    expr->data.ident.name, expr->data.ident.name);
+            }
+            else if (is_known_function(expr->data.ident.name)) {
+                // Function name used as value ? its address
+                emit(cg, "    mov eax, %s  ; Function address",
+                    expr->data.ident.name);
+            }
             else {
                 emit(cg, "    mov eax, [%s]  ; Global %s",
                     expr->data.ident.name, expr->data.ident.name);
@@ -1367,6 +1403,28 @@ void codegen_expression(CodeGen* cg, AST* expr) {
         if (expr->data.call.arg_count > 0) {
             emit(cg, "    add esp, %d      ; Clean %zu args",
                 (int)expr->data.call.arg_count * 4, expr->data.call.arg_count);
+        }
+        break;
+    }
+
+    case N_FUNC_PTR_CALL:
+    {
+        emit(cg, "    ; Indirect function pointer call");
+
+        // Push arguments right to left (cdecl)
+        for (int i = (int)expr->data.func_ptr_call.arg_count - 1; i >= 0; i--) {
+            codegen_expression(cg, expr->data.func_ptr_call.args[i]);
+            emit(cg, "    push eax         ; Arg %d", i);
+        }
+
+        // Evaluate callee expression ? eax holds the function address
+        codegen_expression(cg, expr->data.func_ptr_call.callee);
+        emit(cg, "    call eax          ; Indirect call via function pointer");
+
+        // Caller cleans stack
+        if (expr->data.func_ptr_call.arg_count > 0) {
+            emit(cg, "    add esp, %d      ; Clean %zu args",
+                (int)expr->data.func_ptr_call.arg_count * 4, expr->data.func_ptr_call.arg_count);
         }
         break;
     }
@@ -1718,7 +1776,7 @@ void codegen_statement(CodeGen* cg, AST* stmt) {
             emit(cg, "    je .L%d", case_enter_labels[i]);
         }
 
-        // No match — pop switch value and jump to default or end
+        // No match ? pop switch value and jump to default or end
         emit(cg, "    add esp, 4  ; Pop switch value (no match)");
         if (stmt->data.switch_stmt.default_body) {
             emit(cg, "    jmp .L%d  ; Jump to default", lbl_default);
@@ -1734,11 +1792,11 @@ void codegen_statement(CodeGen* cg, AST* stmt) {
             emit(cg, "    jmp .L%d", case_labels[i]);
         }
 
-        // Case bodies (sequential — allows fallthrough)
+        // Case bodies (sequential ? allows fallthrough)
         for (size_t i = 0; i < case_count && i < 256; i++) {
             emit(cg, ".L%d:  ; Case %d body", case_labels[i], (int)i);
             codegen_statement(cg, stmt->data.switch_stmt.case_bodies[i]);
-            // No automatic jump — allows fallthrough; break handles exit
+            // No automatic jump ? allows fallthrough; break handles exit
         }
 
         // Default body
@@ -1776,6 +1834,7 @@ void codegen_statement(CodeGen* cg, AST* stmt) {
 
     case N_ASSIGN:
     case N_CALL:
+    case N_FUNC_PTR_CALL:
     case N_OPERATOR:
         codegen_expression(cg, stmt);
         break;
@@ -1886,7 +1945,17 @@ void codegen_function_correct(CodeGen* cg, AST* func) {
 void codegen_program(CodeGen* cg, AST* program) {
     if (!program || program->type != N_PROGRAM) return;
 
-    // First pass: register structs and collect global info
+    // Reset function name table
+    func_table_reset();
+
+    // First pass: register structs, globals, AND function names
+    for (size_t i = 0; i < program->data.program.func_count; i++) {
+        AST* func = program->data.program.functions[i];
+        if (func->type == N_FUNCTION && func->data.function.name) {
+            func_table_add(func->data.function.name);
+        }
+    }
+
     for (size_t i = 0; i < program->data.program.global_count; i++) {
         AST* global = program->data.program.globals[i];
 

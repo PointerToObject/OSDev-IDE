@@ -37,6 +37,7 @@ const char* node_type_name(Nodes type)
     case N_CAST: return "CAST";
     case N_SIZEOF: return "SIZEOF";
     case N_TERNARY: return "TERNARY";
+    case N_FUNC_PTR_CALL: return "FUNC_PTR_CALL";
     default: return "UNKNOWN";
     }
 }
@@ -135,6 +136,13 @@ void ast_print(AST* node, int indent)
         printf(" %s(%zu args)\n", node->data.call.name, node->data.call.arg_count);
         for (size_t i = 0; i < node->data.call.arg_count; i++)
             ast_print(node->data.call.args[i], indent + 1);
+        return;
+    case N_FUNC_PTR_CALL:
+        printf(" (%zu args)\n", node->data.func_ptr_call.arg_count);
+        print_indent(indent + 1); printf("CALLEE:\n");
+        ast_print(node->data.func_ptr_call.callee, indent + 2);
+        for (size_t i = 0; i < node->data.func_ptr_call.arg_count; i++)
+            ast_print(node->data.func_ptr_call.args[i], indent + 1);
         return;
     case N_STRUCT_DECL:
         printf(" %s (%zu members)", node->data.struct_decl.name ? node->data.struct_decl.name : "(anon)",
