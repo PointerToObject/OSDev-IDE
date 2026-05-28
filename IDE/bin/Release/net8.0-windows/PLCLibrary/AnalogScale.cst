@@ -1,0 +1,33 @@
+// AnalogScale: 4-20mA (or any raw range) -> engineering units with clamp.
+// raw_min/raw_max are the analog input's expected range (e.g. 6400..32000 for 4-20mA).
+
+struct AnalogScale {
+    int raw;
+    int raw_min;
+    int raw_max;
+    int eng_min;
+    int eng_max;
+    int eng_value;
+    int out_of_range;
+};
+
+int analog_scale(struct AnalogScale* a) {
+    int span_raw = a->raw_max - a->raw_min;
+    int span_eng = a->eng_max - a->eng_min;
+    if (span_raw == 0) {
+        a->eng_value = a->eng_min;
+        a->out_of_range = 1;
+        return a->eng_value;
+    }
+    int delta = a->raw - a->raw_min;
+    int scaled = a->eng_min + (delta * span_eng) / span_raw;
+    if (a->raw < a->raw_min || a->raw > a->raw_max) {
+        a->out_of_range = 1;
+    } else {
+        a->out_of_range = 0;
+    }
+    if (scaled < a->eng_min) scaled = a->eng_min;
+    if (scaled > a->eng_max) scaled = a->eng_max;
+    a->eng_value = scaled;
+    return scaled;
+}

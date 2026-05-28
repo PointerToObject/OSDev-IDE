@@ -1,0 +1,30 @@
+// Motor: 3-state contactor controller with start/stop/fault and speed feedback.
+// Insert this struct + free function at the cursor; CST emits a TwinCAT/AB FUNCTION + DUT.
+
+struct Motor {
+    int start;
+    int stop;
+    int fault;
+    int running;
+    int speed_setpoint;
+    int speed_actual;
+};
+
+void motor_run(struct Motor* m) {
+    if (m->fault) {
+        m->running = 0;
+        return;
+    }
+    if (m->stop) {
+        m->running = 0;
+        return;
+    }
+    if (m->start) {
+        m->running = 1;
+    }
+    if (m->running) {
+        m->speed_actual = m->speed_setpoint;
+    } else {
+        m->speed_actual = 0;
+    }
+}
