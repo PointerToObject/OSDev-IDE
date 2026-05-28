@@ -10,11 +10,11 @@ none
 false
 TRACE;RELEASE;NET;NET8_0;NETCOREAPP
 C:\Users\aiden\OneDrive\Desktop\compiler\BootstrapCompiler\IDE\App.xaml
-11407045341
-23-1613153838
-1037788627
-213-297546785
-MainWindow.xaml;
+4-868832311
+32-1180107015
+25-599647740
+214-425945030
+MainWindow.xaml;Sim\HmiDesigner.xaml;Sim\LadderView.xaml;Sim\SimWindow.xaml;
 
 False
 

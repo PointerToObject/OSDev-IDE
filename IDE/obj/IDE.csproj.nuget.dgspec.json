@@ -69,6 +69,10 @@
             "Quicker.AvalonEdit": {
               "target": "Package",
               "version": "[6.3.1, )"
+            },
+            "System.IO.Ports": {
+              "target": "Package",
+              "version": "[8.0.0, )"
             }
           },
           "imports": [

@@ -31,5 +31,14 @@
 [assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("robotocondensed-lightitalic.ttf")]
 [assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("robotocondensed-regular.ttf")]
 [assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("iconlol.ico")]
+[assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("plclibrary/alarm.cst")]
+[assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("plclibrary/analogscale.cst")]
+[assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("plclibrary/counterwrap.cst")]
+[assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("plclibrary/motor.cst")]
+[assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("plclibrary/pid.cst")]
+[assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("plclibrary/timerwrap.cst")]
+[assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("plclibrary/valve.cst")]
+[assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("cst_devices.h")]
+[assembly: System.Windows.Resources.AssemblyAssociatedContentFileAttribute("cst_runtime.h")]
 
 
