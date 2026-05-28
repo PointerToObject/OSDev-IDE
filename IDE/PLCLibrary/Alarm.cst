@@ -1,0 +1,28 @@
+// Alarm: latching alarm with acknowledge/reset and severity levels.
+// Severity: 0 = info, 1 = warning, 2 = critical. Latches active until reset.
+
+struct Alarm {
+    int trigger;
+    int ack;
+    int reset;
+    int severity;
+    int active;
+    int latched;
+    int acked;
+};
+
+void alarm_step(struct Alarm* a) {
+    if (a->trigger) {
+        a->active = 1;
+        a->latched = 1;
+    } else {
+        a->active = 0;
+    }
+    if (a->ack) {
+        a->acked = 1;
+    }
+    if (a->reset && !a->active) {
+        a->latched = 0;
+        a->acked = 0;
+    }
+}

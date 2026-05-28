@@ -46,7 +46,14 @@ namespace OSDevIDE
             _editor.TextArea.TextEntered += OnTextEntered;
             BuildStdlibEntries();
             BuildKeywordEntries();
+            BuildCstRuntimeEntries();
+            BuildSnippetEntries();
+            AttachHoverTooltips();
         }
+
+        // ---- New entry lists for the CST PLC runtime + snippet expansion ----
+        private List<CompletionEntry> _cstRuntimeEntries = new();
+        private List<CompletionEntry> _snippetEntries    = new();
 
         public void Detach()
         {
@@ -113,7 +120,7 @@ namespace OSDevIDE
             string lower = prefix.ToLower();
 
             // Search all sources
-            foreach (var entry in _stdlibEntries.Concat(_keywordEntries).Concat(_userEntries))
+            foreach (var entry in _stdlibEntries.Concat(_keywordEntries).Concat(_userEntries).Concat(_cstRuntimeEntries).Concat(_snippetEntries))
             {
                 if (entry.Text.ToLower().StartsWith(lower) ||
                     entry.Text.ToLower().Contains(lower))
@@ -351,22 +358,26 @@ namespace OSDevIDE
         {
             string text = _editor.Text;
 
-            // Pattern 1: "TypeName varName" or "TypeName *varName" (local or global)
-            var match = Regex.Match(text, @"(\w+)\s*\*?\s+\*?" + Regex.Escape(varName) + @"\s*[;=\[\(,]");
-            if (match.Success)
+            // Terminators after the variable name. `)` and `\n` cover function
+            // parameters; the rest cover locals, globals, array decls, and inits.
+            const string Term = @"[;=\[\(,\)\n\r]";
+
+            // Pattern 1: "TypeName varName" or "TypeName *varName" (local, global, or param)
+            // Walk all matches and pick the one where TypeName is a known struct —
+            // skips false positives like `return p` or `if p`.
+            var matches = Regex.Matches(text, @"(\w+)\s*\*?\s+\*?" + Regex.Escape(varName) + @"\s*" + Term);
+            foreach (Match match in matches)
             {
                 string typeName = match.Groups[1].Value;
-                // Skip C keywords that aren't types
-                if (typeName != "return" && typeName != "if" && typeName != "while" && typeName != "for" && typeName != "switch")
-                {
-                    // Check if it's a known struct type
-                    if (_structMembers.ContainsKey(typeName))
-                        return typeName;
-                }
+                if (typeName == "return" || typeName == "if" || typeName == "while" ||
+                    typeName == "for" || typeName == "switch" || typeName == "else")
+                    continue;
+                if (_structMembers.ContainsKey(typeName))
+                    return typeName;
             }
 
-            // Pattern 2: "struct TypeName varName" or "struct TypeName *varName"
-            var structMatch = Regex.Match(text, @"struct\s+(\w+)\s*\*?\s+" + Regex.Escape(varName) + @"\s*[;=\[\(,]");
+            // Pattern 2: "struct TypeName varName" / "struct TypeName *varName"
+            var structMatch = Regex.Match(text, @"struct\s+(\w+)\s*\*?\s+\*?" + Regex.Escape(varName) + @"\s*" + Term);
             if (structMatch.Success)
                 return structMatch.Groups[1].Value;
 
@@ -812,6 +823,245 @@ namespace OSDevIDE
             K("sizeof", "sizeof(type) — size in bytes");
             K("NULL", "0 — null pointer");
             K("asm", "asm(\"instruction\"); — inline assembly");
+        }
+
+        // ===================================================================
+        //                       CST PLC runtime database
+        // ===================================================================
+
+        /// <summary>
+        /// All `cst_*` helpers from runtime/cst_runtime.h. These are recognized
+        /// as builtins by the CST compiler — completion + hover tooltips here
+        /// mean the editor knows about them too.
+        /// </summary>
+        private void BuildCstRuntimeEntries()
+        {
+            void F(string name, string sig) =>
+                _cstRuntimeEntries.Add(new CompletionEntry { Text = name, Description = sig,
+                    Category = "function", InsertText = name + "(" });
+            void T(string name, string sig) =>
+                _cstRuntimeEntries.Add(new CompletionEntry { Text = name, Description = sig, Category = "type" });
+
+            // ── Industrial logic helpers (the seal stuff) ──
+            F("cst_seal",     "int cst_seal(int state, int set, int reset)  — Set-priority seal-in latch. " +
+                              "Lowers to [XIC(state),XIC(set)] XIO(reset) OTE rung. Use for START/STOP buttons.");
+            F("cst_seal_rp",  "int cst_seal_rp(int state, int set, int reset)  — Reset-priority seal-in. " +
+                              "STOP wins on simultaneous press. USE THIS FOR E-STOPS.");
+            F("cst_within",   "int cst_within(int v, int lo, int hi)  — true iff lo <= v <= hi. Lowers to LIM(lo,v,hi).");
+
+            // ── Timers ──
+            T("cst_time_t",   "cst_time_t — On-delay timer instance. Use cst_timer_on/off/done.");
+            T("cst_tof_t",    "cst_tof_t — Off-delay timer instance. Q stays true preset_ms after input drops.");
+            F("cst_timer_on", "void cst_timer_on(cst_time_t* t, int preset_ms)  — Run TON. Preset always in ms.");
+            F("cst_timer_off","void cst_timer_off(cst_time_t* t)  — Reset/disable timer.");
+            F("cst_timer_done","int cst_timer_done(cst_time_t* t)  — Lowers to XIC(t.DN).");
+            F("cst_tof_start","void cst_tof_start(cst_tof_t* t, int signal, int preset_ms)  — Off-delay timer.");
+            F("cst_tof_active","int cst_tof_active(cst_tof_t* t)  — True while signal high OR for preset_ms after drop.");
+
+            // ── Edges ──
+            T("cst_redge_t",  "cst_redge_t — Rising-edge detector state.");
+            T("cst_fedge_t",  "cst_fedge_t — Falling-edge detector state.");
+            F("cst_redge_update","void cst_redge_update(cst_redge_t* e, int signal)  — Call every scan.");
+            F("cst_redge_fired", "int cst_redge_fired(cst_redge_t* e)  — TRUE for one scan after 0→1.");
+            F("cst_fedge_update","void cst_fedge_update(cst_fedge_t* e, int signal)");
+            F("cst_fedge_fired", "int cst_fedge_fired(cst_fedge_t* e)");
+
+            // ── Counters ──
+            T("cst_ctu_t",    "cst_ctu_t — Up-counter (CTU).");
+            T("cst_ctd_t",    "cst_ctd_t — Down-counter (CTD).");
+            F("cst_ctu_count","void cst_ctu_count(cst_ctu_t* c, int input, int reset, int preset)  — Increments on 0→1 of input.");
+            F("cst_ctu_done", "int cst_ctu_done(cst_ctu_t* c)  — true when count >= preset.");
+            F("cst_ctu_value","int cst_ctu_value(cst_ctu_t* c)  — current ACC.");
+            F("cst_ctd_count","void cst_ctd_count(cst_ctd_t* c, int input, int load, int preset)");
+            F("cst_ctd_done", "int cst_ctd_done(cst_ctd_t* c)");
+            F("cst_ctd_value","int cst_ctd_value(cst_ctd_t* c)");
+
+            // ── Memory / logging / math ──
+            F("cst_memcpy",   "void cst_memcpy(void* dst, const void* src, int n)  — COP on AB / MEMCPY on TwinCAT.");
+            F("cst_memset",   "void cst_memset(void* dst, int byte_value, int n)  — FILL on AB.");
+            F("cst_log_str",  "void cst_log_str(const char* msg)  — Diagnostic log (placeholder on AB).");
+            F("cst_log_int",  "void cst_log_int(int value)");
+            F("cst_abs",      "int cst_abs(int x)  — Absolute value (IEC ABS).");
+            F("cst_min",      "int cst_min(int a, int b)  — Minimum (IEC MIN).");
+            F("cst_max",      "int cst_max(int a, int b)  — Maximum (IEC MAX).");
+            F("cst_clamp",    "int cst_clamp(int value, int lo, int hi)  — Constrain to [lo,hi] (IEC LIMIT).");
+            F("cst_sqrt",     "int cst_sqrt(int x)  — Integer square root.");
+            F("cst_pow",      "int cst_pow(int base, int exp)  — base^exp.");
+            F("cst_floor",    "int cst_floor(int x)");
+            F("cst_ceil",     "int cst_ceil(int x)");
+        }
+
+        // ===================================================================
+        //                       Snippets (multi-line expansion)
+        // ===================================================================
+
+        /// <summary>
+        /// Snippet entries — typing the trigger and Tab inserts the entire
+        /// pattern. Use for repetitive PLC idioms: motor starter, fault latch,
+        /// timer-on pulse, etc.
+        /// </summary>
+        private void BuildSnippetEntries()
+        {
+            void S(string trigger, string description, string body) =>
+                _snippetEntries.Add(new CompletionEntry
+                {
+                    Text = trigger,
+                    Description = "[snippet] " + description + "\n\n" + body,
+                    Category = "snippet",
+                    InsertText = body,
+                });
+
+            S("seal",
+              "Set-priority seal-in latch. Press start, motor runs until stop.",
+              "running = cst_seal(running, start_btn, stop_btn);");
+
+            S("seal_rp",
+              "Reset-priority seal-in (safety / E-stop).",
+              "running = cst_seal_rp(running, start_btn, estop);");
+
+            S("motor_starter",
+              "Classic motor starter: seal-in + overload trip + run lamp.",
+              "// motor starter — seal-in with overload + fault\n" +
+              "fault   = overload || (start_btn && stop_btn);\n" +
+              "running = cst_seal(running, start_btn, stop_btn || fault);\n" +
+              "motor   = running;\n" +
+              "run_lamp  = running;\n" +
+              "fault_lamp = fault;");
+
+            S("fault_latch",
+              "Latch a fault until manual reset.",
+              "if (condition) fault = 1;\n" +
+              "if (reset_btn) fault = 0;");
+
+            S("timer_pulse",
+              "Generate a one-shot pulse on rising edge of input.",
+              "cst_redge_update(&pulse_edge, input_signal);\n" +
+              "if (cst_redge_fired(&pulse_edge)) {\n" +
+              "    // do something once on the rising edge\n" +
+              "}");
+
+            S("ton_idiom",
+              "Standard timer-on-delay pattern.",
+              "if (enable) {\n" +
+              "    cst_timer_on(&timer, 5000);\n" +
+              "} else {\n" +
+              "    cst_timer_off(&timer);\n" +
+              "}\n" +
+              "if (cst_timer_done(&timer)) {\n" +
+              "    // 5 seconds elapsed\n" +
+              "}");
+
+            S("plc_main",
+              "Skeleton for a CST PLC program.",
+              "#include <allen_bradley_ll>\n" +
+              "#include \"cst_runtime.h\"\n\n" +
+              "// inputs\n" +
+              "bool start_btn;\n" +
+              "bool stop_btn;\n\n" +
+              "// outputs\n" +
+              "bool motor;\n\n" +
+              "// state\n" +
+              "bool running;\n\n" +
+              "int main() {\n" +
+              "    running = cst_seal(running, start_btn, stop_btn);\n" +
+              "    motor = running;\n" +
+              "}");
+        }
+
+        // ===================================================================
+        //                       Hover tooltips
+        // ===================================================================
+
+        private System.Windows.Controls.ToolTip _hoverTip;
+
+        private void AttachHoverTooltips()
+        {
+            _editor.MouseHover += OnEditorMouseHover;
+            _editor.MouseHoverStopped += OnEditorMouseHoverStopped;
+        }
+
+        private void OnEditorMouseHover(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            var pos = _editor.GetPositionFromPoint(e.GetPosition(_editor));
+            if (pos == null) return;
+            int offset;
+            try { offset = _editor.Document.GetOffset(pos.Value.Line, pos.Value.Column); }
+            catch { return; }
+            string word = GetWordAt(offset);
+            if (string.IsNullOrEmpty(word)) return;
+
+            var entry = LookupEntry(word);
+            if (entry == null) return;
+
+            _hoverTip = new System.Windows.Controls.ToolTip
+            {
+                Content = BuildHoverContent(entry),
+                PlacementTarget = _editor,
+                Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse,
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x1E, 0x1E, 0x22)),
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD4, 0xD4, 0xD4)),
+                BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x60, 0x60, 0x6A)),
+                BorderThickness = new System.Windows.Thickness(1),
+                Padding = new System.Windows.Thickness(8, 6, 8, 6),
+                FontFamily = new System.Windows.Media.FontFamily("Segoe UI"),
+                IsOpen = true,
+            };
+            e.Handled = true;
+        }
+
+        private void OnEditorMouseHoverStopped(object sender, System.Windows.Input.MouseEventArgs e)
+        {
+            if (_hoverTip != null) { _hoverTip.IsOpen = false; _hoverTip = null; }
+        }
+
+        private System.Windows.Controls.StackPanel BuildHoverContent(CompletionEntry entry)
+        {
+            var sp = new System.Windows.Controls.StackPanel { MaxWidth = 520 };
+            sp.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = entry.Text,
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                FontWeight = System.Windows.FontWeights.Bold, FontSize = 13,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x9C, 0xDC, 0xFE)),
+            });
+            sp.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = entry.Category, FontSize = 10,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x85, 0x85, 0x85)),
+                Margin = new System.Windows.Thickness(0, 0, 0, 4),
+            });
+            sp.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = entry.Description ?? "",
+                TextWrapping = System.Windows.TextWrapping.Wrap,
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"), FontSize = 12,
+                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xCF, 0xCF, 0xCF)),
+            });
+            return sp;
+        }
+
+        private string GetWordAt(int offset)
+        {
+            var doc = _editor.Document;
+            if (offset < 0 || offset >= doc.TextLength) return "";
+            int start = offset;
+            while (start > 0 && IsIdent(doc.GetCharAt(start - 1))) start--;
+            int end = offset;
+            while (end < doc.TextLength && IsIdent(doc.GetCharAt(end))) end++;
+            if (end <= start) return "";
+            return doc.GetText(start, end - start);
+        }
+
+        private static bool IsIdent(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+        private CompletionEntry LookupEntry(string name)
+        {
+            foreach (var e in _cstRuntimeEntries) if (e.Text == name) return e;
+            foreach (var e in _snippetEntries)    if (e.Text == name) return e;
+            foreach (var e in _stdlibEntries)     if (e.Text == name) return e;
+            foreach (var e in _keywordEntries)    if (e.Text == name) return e;
+            foreach (var e in _userEntries)       if (e.Text == name) return e;
+            return null;
         }
 
         #endregion

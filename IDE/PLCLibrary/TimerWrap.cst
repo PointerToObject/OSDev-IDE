@@ -1,0 +1,18 @@
+// TimerWrap: thin wrapper around the cst_runtime timer shim. Lowers to
+// TwinCAT TON or AB TONR depending on -target.
+
+struct TimerWrap {
+    int enable;
+    int preset_ms;
+    int done;
+    cst_time_t handle;
+};
+
+void timer_wrap_step(struct TimerWrap* t) {
+    if (t->enable) {
+        cst_timer_on(&t->handle, t->preset_ms);
+    } else {
+        cst_timer_off(&t->handle);
+    }
+    t->done = cst_timer_done(&t->handle);
+}

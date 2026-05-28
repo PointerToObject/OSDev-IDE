@@ -1,0 +1,29 @@
+// CounterWrap: rising-edge up-counter with preset/reset.
+// Detects 0->1 transitions on `pulse` and increments `count`.
+
+struct CounterWrap {
+    int pulse;
+    int prev_pulse;
+    int reset;
+    int preset;
+    int count;
+    int done;
+};
+
+void counter_step(struct CounterWrap* c) {
+    if (c->reset) {
+        c->count = 0;
+        c->done = 0;
+        c->prev_pulse = c->pulse;
+        return;
+    }
+    if (c->pulse && !c->prev_pulse) {
+        c->count = c->count + 1;
+    }
+    c->prev_pulse = c->pulse;
+    if (c->count >= c->preset) {
+        c->done = 1;
+    } else {
+        c->done = 0;
+    }
+}

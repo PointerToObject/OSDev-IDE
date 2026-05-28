@@ -1,0 +1,24 @@
+<UserControl x:Class="OSDevIDE.Sim.LadderView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             Background="#0F0F14" Foreground="#D4D4D4" FontFamily="Segoe UI">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="#23232A" BorderBrush="#3F3F46" BorderThickness="0,0,0,1" Padding="8,6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Routine:" VerticalAlignment="Center" Foreground="#888" Margin="0,0,6,0"/>
+                <ComboBox x:Name="RoutineCombo" Width="200" Background="#1B1B1F" Foreground="#D4D4D4"
+                          BorderBrush="#3F3F46" SelectionChanged="Routine_Changed"/>
+                <Rectangle Width="1" Margin="14,2" Fill="#3F3F46"/>
+                <materialDesign:PackIcon Kind="LightningBolt" Foreground="#4EC9B0" Width="14" Height="14" VerticalAlignment="Center"/>
+                <TextBlock Text="ENERGIZED" Foreground="#4EC9B0" FontSize="11" Margin="4,0,16,0" VerticalAlignment="Center"/>
+                <Rectangle Width="14" Height="2" Fill="#454552" VerticalAlignment="Center"/>
+                <TextBlock Text="OFF" Foreground="#888" FontSize="11" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="StatsText" Foreground="#888" FontSize="11" Margin="24,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <Canvas x:Name="LadderCanvas" Background="#0F0F14"/>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

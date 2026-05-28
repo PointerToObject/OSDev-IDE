@@ -26,8 +26,132 @@
         <SolidColorBrush x:Key="VSCForeground" Color="#CCCCCC"/>
         <SolidColorBrush x:Key="VSCLineNumber" Color="#858585"/>
         <SolidColorBrush x:Key="HeaderBg" Color="#2D2D30"/>
+        <SolidColorBrush x:Key="AccentBlue" Color="#007ACC"/>
+        <SolidColorBrush x:Key="AccentGreen" Color="#16825D"/>
 
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- Dark ComboBox style — full visual override for the popup, items, and toggle -->
+        <Style x:Key="DarkComboBoxItem" TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#D4D4D4"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}"
+                                BorderThickness="2,0,0,0"
+                                BorderBrush="Transparent">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#2A2D2E"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#094771"/>
+                                <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#007ACC"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="#3A3D3E"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkComboBoxToggleButton" TargetType="ToggleButton">
+            <Setter Property="Background" Value="#1E1E1E"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderThickness="1" BorderBrush="#3F3F46" CornerRadius="2">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="20"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0" Margin="8,0,0,0"
+                                                  VerticalAlignment="Center" HorizontalAlignment="Left"/>
+                                <Path Grid.Column="1" Data="M 0 0 L 4 4 L 8 0 Z"
+                                      Fill="#858585" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#007ACC"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#007ACC"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkComboBox" TargetType="ComboBox">
+            <Setter Property="Background" Value="#1E1E1E"/>
+            <Setter Property="Foreground" Value="#D4D4D4"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton" Grid.Column="0"
+                                          Style="{StaticResource DarkComboBoxToggleButton}"
+                                          Focusable="false" ClickMode="Press"
+                                          IsChecked="{Binding Path=IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ContentPresenter x:Name="ContentSite"
+                                                  IsHitTestVisible="False"
+                                                  Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                  ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                                  Margin="0,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  HorizontalAlignment="Left"/>
+                            </ToggleButton>
+                            <Popup x:Name="Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Slide">
+                                <Grid x:Name="DropDown" SnapsToDevicePixels="True"
+                                      MinWidth="{TemplateBinding ActualWidth}"
+                                      MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border x:Name="DropDownBorder"
+                                            Background="#252526"
+                                            BorderThickness="1" BorderBrush="#3F3F46"
+                                            Margin="0,2,0,0">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="Black" Direction="270" ShadowDepth="3" Opacity="0.4" BlurRadius="6"/>
+                                        </Border.Effect>
+                                        <ScrollViewer Margin="0" SnapsToDevicePixels="True">
+                                            <StackPanel IsItemsHost="True"
+                                                        KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <!-- Dark ScrollBar Style -->
         <Style x:Key="DarkScrollBar" TargetType="{x:Type ScrollBar}">
@@ -337,11 +461,37 @@
                         <TextBlock Text="Extensions" Foreground="#CCCCCC" FontSize="12" VerticalAlignment="Center" FontFamily="Segoe UI"/>
                     </StackPanel>
                 </Button>
+
+                <!-- PLC LIBRARY BUTTON - Insert predefined industrial structs/function blocks -->
+                <Button Background="Transparent" BorderThickness="0" Padding="8,4" Cursor="Hand" Click="PLCLibrary_Click">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="border" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="border" Property="Background" Value="#3E3E42"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="LibraryShelves" Foreground="#CCCCCC" Width="14" Height="14" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="PLC Library" Foreground="#CCCCCC" FontSize="12" VerticalAlignment="Center" FontFamily="Segoe UI"/>
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Border>
 
         <!-- Sidebar Explorer -->
-        <Border DockPanel.Dock="Left" Width="280" Background="{StaticResource VSCSideBarBg}" BorderThickness="0,0,1,0" BorderBrush="#3F3F46">
+        <Border x:Name="ExplorerPanel" DockPanel.Dock="Left" Width="280" Background="{StaticResource VSCSideBarBg}" BorderThickness="0,0,1,0" BorderBrush="#3F3F46">
             <Grid>
                 <Border Background="{StaticResource HeaderBg}" Height="30" VerticalAlignment="Top">
                     <Grid VerticalAlignment="Center" Margin="12,0">
@@ -441,11 +591,11 @@
         <!-- Main Content -->
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="30"/>
-                <RowDefinition Height="30"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="250"/>
-                <RowDefinition Height="24"/>
+                <RowDefinition Height="32"/>
+                <RowDefinition Height="32"/>
+                <RowDefinition Height="2*" MinHeight="120"/>
+                <RowDefinition Height="*" MinHeight="100" MaxHeight="500"/>
+                <RowDefinition Height="26"/>
             </Grid.RowDefinitions>
 
             <!-- Toolbar with Buttons -->
@@ -463,6 +613,57 @@
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="PlayCircle" Foreground="#4EC9B0" Width="18" Height="18" Margin="0,0,6,0" VerticalAlignment="Center"/>
                                 <TextBlock Text="Build and Run" Foreground="#4EC9B0" FontSize="13" VerticalAlignment="Center" FontFamily="Segoe UI" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- PLC Target dropdown — picks which backend CST.exe emits for. -->
+                        <Border Margin="16,0,0,0" Padding="0" Background="#252526" CornerRadius="3" BorderThickness="1" BorderBrush="#3F3F46">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <materialDesign:PackIcon Kind="Cpu64Bit" Foreground="#858585" Width="14" Height="14" Margin="10,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Target" Foreground="#858585" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="SemiBold"/>
+                                <ComboBox x:Name="TargetCombo" Width="180" Height="24" Margin="0,2,2,2"
+                                          Style="{StaticResource DarkComboBox}"
+                                          SelectionChanged="TargetCombo_Changed">
+                                    <ComboBoxItem Content="Beckhoff TwinCAT 3" Tag="beckhoff" IsSelected="True"/>
+                                    <ComboBoxItem Content="Allen-Bradley Logix (ST)" Tag="allen_bradley"/>
+                                    <ComboBoxItem Content="Allen-Bradley Logix (Ladder)" Tag="allen_bradley_ll"/>
+                                    <ComboBoxItem Content="Mitsubishi FX1S/FX1N" Tag="mitsubishi_fx"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Deploy to GX Works 2 — Mitsubishi target only.
+                             Click = build C → ST, focus the running GX Works 2 window,
+                             auto-paste the ST into POU_01, trigger F4 compile.  Then
+                             user just hits Online → Write to PLC → Execute. Same shape
+                             as the TwinCAT deploy, just GX is the host instead of TC. -->
+                        <Button x:Name="DeployFxBtn" Click="DeployFx_Click" Style="{StaticResource RunButton}"
+                                ToolTip="Build &amp; auto-paste into GX Works 2; you click Write to PLC"
+                                Margin="8,0,0,0" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Rocket" Foreground="#4EC9B0" Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Deploy to GX Works 2" Foreground="#4EC9B0" FontSize="13" VerticalAlignment="Center" FontFamily="Segoe UI" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Studio 5000 ladder deploy: writes the compiled .L5X to the
+                             configured watch folder so Studio 5000 can pick it up. -->
+                        <Button x:Name="DeployLadderBtn" Click="DeployLadder_Click" Style="{StaticResource RunButton}"
+                                ToolTip="Copy compiled .L5X to the Studio 5000 import folder"
+                                Margin="8,0,0,0" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Rocket" Foreground="#4EC9B0" Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Deploy to Studio 5000" Foreground="#4EC9B0" FontSize="13" VerticalAlignment="Center" FontFamily="Segoe UI" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Simulator: load the compiled .L5X in the in-IDE ladder VM. -->
+                        <Button x:Name="SimulateBtn" Click="Simulate_Click" Style="{StaticResource ModernButton}"
+                                ToolTip="Open the simulator with the compiled L5X loaded"
+                                Margin="8,0,0,0" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Eye" Foreground="#569CD6" Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Simulate" Foreground="#569CD6" FontSize="13" VerticalAlignment="Center" FontFamily="Segoe UI" FontWeight="SemiBold"/>
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -604,6 +805,107 @@
                                     <TextBlock Text="OLLAMA" FontSize="11" FontWeight="SemiBold" FontFamily="Segoe UI"/>
                                 </StackPanel>
                             </RadioButton>
+
+                            <!-- GENERATED tab — shows the latest compiler output (.st / .gxil) -->
+                            <RadioButton x:Name="GeneratedTab" GroupName="BottomPanels" Checked="GeneratedTab_Checked" Margin="8,0,0,0"
+                                         Background="Transparent" Foreground="#858585" BorderThickness="0" Padding="8,6" Cursor="Hand">
+                                <RadioButton.Style>
+                                    <Style TargetType="RadioButton">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="RadioButton">
+                                                    <Border x:Name="border" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="0,0,0,2" BorderBrush="Transparent">
+                                                        <ContentPresenter/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Foreground" Value="#CCCCCC"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                                                            <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </RadioButton.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="FileCode" Width="14" Height="14" Margin="0,0,6,0"/>
+                                    <TextBlock Text="GENERATED" FontSize="11" FontWeight="SemiBold" FontFamily="Segoe UI"/>
+                                    <Border x:Name="GeneratedBadgeContainer" Background="#16825D" CornerRadius="8" Padding="6,1" Margin="6,0,0,0" Visibility="Collapsed">
+                                        <TextBlock x:Name="GeneratedBadge" Text="0" Foreground="White" FontSize="10" FontWeight="SemiBold"/>
+                                    </Border>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <!-- PORTS tab — UI for binding C variables to physical X/Y pins.
+                                 Edits get written back into the source file as `// CST_IO:` pragmas
+                                 so the next build picks them up automatically. -->
+                            <RadioButton x:Name="PortsTab" GroupName="BottomPanels" Checked="PortsTab_Checked" Margin="8,0,0,0"
+                                         Background="Transparent" Foreground="#858585" BorderThickness="0" Padding="8,6" Cursor="Hand">
+                                <RadioButton.Style>
+                                    <Style TargetType="RadioButton">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="RadioButton">
+                                                    <Border x:Name="border" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="0,0,0,2" BorderBrush="Transparent">
+                                                        <ContentPresenter/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Foreground" Value="#CCCCCC"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                                                            <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </RadioButton.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="Power" Width="14" Height="14" Margin="0,0,6,0"/>
+                                    <TextBlock Text="PORTS" FontSize="11" FontWeight="SemiBold" FontFamily="Segoe UI"/>
+                                </StackPanel>
+                            </RadioButton>
+
+                            <!-- ERRORS tab — live diagnostics from CST.exe -->
+                            <RadioButton x:Name="ErrorsTab" GroupName="BottomPanels" Checked="ErrorsTab_Checked" Margin="8,0,0,0"
+                                         Background="Transparent" Foreground="#858585" BorderThickness="0" Padding="8,6" Cursor="Hand">
+                                <RadioButton.Style>
+                                    <Style TargetType="RadioButton">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="RadioButton">
+                                                    <Border x:Name="border" Background="Transparent" Padding="{TemplateBinding Padding}" BorderThickness="0,0,0,2" BorderBrush="Transparent">
+                                                        <ContentPresenter/>
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Foreground" Value="#CCCCCC"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsChecked" Value="True">
+                                                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                                                            <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </RadioButton.Style>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="AlertCircle" Width="14" Height="14" Margin="0,0,6,0"/>
+                                    <TextBlock Text="ERRORS" FontSize="11" FontWeight="SemiBold" FontFamily="Segoe UI"/>
+                                    <Border x:Name="ErrorsBadgeContainer" Background="#A1260D" CornerRadius="8" Padding="6,1" Margin="6,0,0,0" Visibility="Collapsed">
+                                        <TextBlock x:Name="ErrorsBadge" Text="0" Foreground="White" FontSize="10" FontWeight="SemiBold"/>
+                                    </Border>
+                                </StackPanel>
+                            </RadioButton>
                         </StackPanel>
                     </Border>
 
@@ -694,18 +996,178 @@
                                 </StackPanel>
                             </Border>
                         </Grid>
+
+                        <!-- Generated Code Panel — shows .st / .gxil from the last build -->
+                        <Grid x:Name="GeneratedPanel" Background="#1E1E1E" Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <Border Grid.Row="0" Background="#252526" Padding="12,6" BorderThickness="0,0,0,1" BorderBrush="#3F3F46">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="File:" Foreground="#858585" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <ComboBox x:Name="GeneratedFilesList" Width="240" Height="24"
+                                                  Style="{StaticResource DarkComboBox}"
+                                                  SelectionChanged="GeneratedFilesList_Changed"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button x:Name="OpenInGxButton" Content="Open in GX Works 2" Click="OpenInGxWorks_Click"
+                                                Visibility="Collapsed"
+                                                Background="#16825D" Foreground="White" BorderThickness="0"
+                                                FontSize="11" Padding="10,3" Cursor="Hand" Margin="0,0,8,0"/>
+                                        <Button Content="Copy All" Click="GeneratedCopyAll_Click"
+                                                Background="#0E639C" Foreground="White" BorderThickness="0"
+                                                FontSize="11" Padding="10,3" Cursor="Hand"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <TextBox x:Name="GeneratedPreview" Grid.Row="1"
+                                     Background="#1E1E1E" Foreground="#D4D4D4"
+                                     FontFamily="Consolas" FontSize="12"
+                                     IsReadOnly="True" AcceptsReturn="True"
+                                     TextWrapping="NoWrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     HorizontalScrollBarVisibility="Auto"
+                                     BorderThickness="0" Padding="12,8"/>
+                        </Grid>
+
+                        <!-- Ports Panel — bind C variable names to physical PLC pins.
+                             Apply writes `// CST_IO:` pragmas into Source/main.c so the
+                             CST compiler picks the bindings up on the next build. -->
+                        <Grid x:Name="PortsPanel" Background="#1E1E1E" Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0" Background="#252526" Padding="12,8" BorderThickness="0,0,0,1" BorderBrush="#3F3F46">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="Power" Width="16" Height="16" Foreground="#4EC9B0" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                        <TextBlock Text="I/O Bindings" Foreground="White" FontWeight="SemiBold" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="—  Type a C variable name next to each pin you're using.  Apply writes pragmas into main.c."
+                                                   Foreground="#858585" FontSize="11" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <ScrollViewer Grid.Row="1" Style="{StaticResource DarkScrollViewer}" VerticalScrollBarVisibility="Auto">
+                                <Grid Margin="16,12,16,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Inputs column -->
+                                    <StackPanel Grid.Column="0" x:Name="PortsInputsStack">
+                                        <TextBlock Text="INPUTS" Foreground="#9CDCFE" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                        <!-- Rows are added at runtime so it's easy to retarget across CPU families later. -->
+                                    </StackPanel>
+
+                                    <!-- Outputs column -->
+                                    <StackPanel Grid.Column="2" x:Name="PortsOutputsStack">
+                                        <TextBlock Text="OUTPUTS" Foreground="#4EC9B0" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                    </StackPanel>
+                                </Grid>
+                            </ScrollViewer>
+
+                            <Border Grid.Row="2" Background="#252526" Padding="12,8" BorderThickness="0,1,0,0" BorderBrush="#3F3F46">
+                                <Grid>
+                                    <TextBlock x:Name="PortsHint" Text="" Foreground="#858585" FontSize="11" VerticalAlignment="Center"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Content="Reload from source" Click="PortsReload_Click"
+                                                Background="#3E3E42" Foreground="#CCCCCC" BorderThickness="0"
+                                                FontSize="11" Padding="10,4" Margin="0,0,8,0" Cursor="Hand"/>
+                                        <Button Content="Apply to source" Click="PortsApply_Click"
+                                                Background="#1B7A2B" Foreground="White" BorderThickness="0"
+                                                FontSize="11" Padding="14,4" Cursor="Hand"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <!-- Errors Panel — live diagnostics from CST.exe -->
+                        <Grid x:Name="ErrorsPanel" Background="#1E1E1E" Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0" Background="#252526" Padding="12,6" BorderThickness="0,0,0,1" BorderBrush="#3F3F46">
+                                <Grid>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock x:Name="ErrorsSummary" Text="No errors" Foreground="#CCCCCC" FontSize="11" FontFamily="Segoe UI" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <Button Content="Recheck" Click="ErrorsRecheck_Click"
+                                            HorizontalAlignment="Right"
+                                            Background="#3E3E42" Foreground="#CCCCCC" BorderThickness="0"
+                                            FontSize="11" Padding="10,3" Cursor="Hand"/>
+                                </Grid>
+                            </Border>
+
+                            <ListView x:Name="ErrorsList" Grid.Row="1"
+                                      Background="#1E1E1E" Foreground="#CCCCCC" BorderThickness="0"
+                                      MouseDoubleClick="ErrorsList_DoubleClick"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                      FontFamily="Segoe UI" FontSize="12">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="#CCCCCC"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="Padding" Value="8,2"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#2A2D2E"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter Property="Background" Value="#094771"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.View>
+                                    <GridView>
+                                        <GridView.ColumnHeaderContainerStyle>
+                                            <Style TargetType="GridViewColumnHeader">
+                                                <Setter Property="Background" Value="#252526"/>
+                                                <Setter Property="Foreground" Value="#858585"/>
+                                                <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                                                <Setter Property="BorderBrush" Value="#3F3F46"/>
+                                                <Setter Property="HorizontalContentAlignment" Value="Left"/>
+                                                <Setter Property="Padding" Value="8,4"/>
+                                                <Setter Property="FontSize" Value="11"/>
+                                            </Style>
+                                        </GridView.ColumnHeaderContainerStyle>
+                                        <GridViewColumn Header="" Width="32" DisplayMemberBinding="{Binding Icon}"/>
+                                        <GridViewColumn Header="Line" Width="60" DisplayMemberBinding="{Binding LineDisplay}"/>
+                                        <GridViewColumn Header="Description" Width="700" DisplayMemberBinding="{Binding Message}"/>
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                        </Grid>
                     </Grid>
                 </Grid>
             </Border>
 
             <!-- Status Bar -->
-            <Border Grid.Row="4" Background="{StaticResource VSCStatusBarBg}">
+            <Border x:Name="StatusBar" Grid.Row="4" Background="{StaticResource VSCStatusBarBg}">
                 <Grid>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0">
-                        <materialDesign:PackIcon Kind="CheckCircle" Foreground="White" Width="14" Height="14" Margin="0,0,6,0"/>
+                        <materialDesign:PackIcon x:Name="StatusIcon" Kind="CheckCircle" Foreground="White" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
                         <TextBlock x:Name="StatusText" Text="Ready" Foreground="White" FontSize="12" VerticalAlignment="Center" FontFamily="Segoe UI"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="12,0">
+                        <materialDesign:PackIcon Kind="MapMarkerOutline" Foreground="White" Width="13" Height="13" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="StatusCaretText" Text="Ln 1, Col 1" Foreground="White" FontSize="12" Margin="0,0,16,0" VerticalAlignment="Center" FontFamily="Segoe UI"/>
+                        <Rectangle Width="1" Fill="#66FFFFFF" Margin="0,3,16,3"/>
+                        <materialDesign:PackIcon Kind="Cpu64Bit" Foreground="White" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="StatusTargetText" Text="beckhoff" Foreground="White" FontSize="12" Margin="0,0,16,0" VerticalAlignment="Center" FontFamily="Segoe UI" FontWeight="SemiBold"/>
+                        <Rectangle Width="1" Fill="#66FFFFFF" Margin="0,3,16,3"/>
                         <materialDesign:PackIcon Kind="FormatText" Foreground="White" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>
                         <TextBlock Text="UTF-8" Foreground="White" FontSize="12" Margin="0,0,16,0" VerticalAlignment="Center" FontFamily="Segoe UI"/>
                         <materialDesign:PackIcon Kind="FileCodeOutline" Foreground="White" Width="14" Height="14" Margin="0,0,6,0" VerticalAlignment="Center"/>

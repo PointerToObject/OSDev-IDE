@@ -15,6 +15,23 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- PLC Library snippets — copied to output for runtime discovery. -->
+    <Content Include="PLCLibrary\*.cst">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('D:\CST\CST\runtime')">
+    <!-- Runtime headers (cst_devices.h, cst_runtime.h) — bundled with the IDE
+         and auto-copied into every CST project's Source/ folder on creation.
+         Sourced from the CST repo's runtime/ directory. -->
+    <Content Include="D:\CST\CST\runtime\*.h"
+             Link="runtime\%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="..\..\..\..\..\Downloads\iconlol.jpg">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
@@ -27,6 +44,7 @@
     <PackageReference Include="MaterialDesignThemes" Version="5.3.0" />
     <PackageReference Include="MaterialDesignThemes.Wpf" Version="1.0.1" />
     <PackageReference Include="Quicker.AvalonEdit" Version="6.3.1" />
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
