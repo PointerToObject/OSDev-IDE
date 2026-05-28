@@ -1,0 +1,9 @@
+D:\CST\CST\CST\CST-Generation\src\CST.c;D:\CST\CST\CST\x64\Release\CST.obj
+D:\CST\CST\CST\CST-Generation\Targets\allen_bradley.c;D:\CST\CST\CST\x64\Release\allen_bradley.obj
+D:\CST\CST\CST\CST-Generation\Targets\allen_bradley_ll.c;D:\CST\CST\CST\x64\Release\allen_bradley_ll.obj
+D:\CST\CST\CST\CST-Generation\Targets\beckhoff.c;D:\CST\CST\CST\x64\Release\beckhoff.obj
+D:\CST\CST\CST\CST-Generation\Targets\mitsubishi_fx.c;D:\CST\CST\CST\x64\Release\mitsubishi_fx.obj
+D:\CST\CST\CST\Main.c;D:\CST\CST\CST\x64\Release\Main.obj
+D:\CST\CST\CST\Parser\src\Parser.c;D:\CST\CST\CST\x64\Release\Parser.obj
+D:\CST\CST\CST\Tokenizer\Preprocessor\yes\Preprocessor.c;D:\CST\CST\CST\x64\Release\Preprocessor.obj
+D:\CST\CST\CST\Tokenizer\src\Tokenizer.c;D:\CST\CST\CST\x64\Release\Tokenizer.obj
